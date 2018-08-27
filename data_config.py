@@ -34,6 +34,12 @@ class Gigawords(DataConfig):
 
         self.max_vocab = 200000
         self.min_freq = 3
+    
+    def build_dataset(self, src_file, tgt_file, vocab):
+        class GigawordsDataset(Dataset):
+    
+
+
 
     def build_generator(self, src_file, tgt_file, vocab):
         def gen():
