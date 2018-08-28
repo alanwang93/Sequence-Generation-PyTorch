@@ -27,7 +27,10 @@ class Vocab:
         self.unk_token = data_config.unk_token
         self.sos_token = data_config.sos_token
         self.eos_token = data_config.eos_token
-        self.pad_idx=0, self.unk_idx=1, self.sos_idx=2, self.eos_idx=3
+        self.pad_idx=0
+        self.unk_idx=1
+        self.sos_idx=2
+        self.eos_idx=3
         self.tokens = self.freqs = self.itos = self.stoi = self.vectors =  None
         self.keys = ['tokens', 'freqs', 'itos', 'stoi', 'unk_token', \
                 'pad_token', 'sos_token', 'eos_token', 'vectors', \
