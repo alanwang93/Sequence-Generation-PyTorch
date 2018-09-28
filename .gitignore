@@ -3,11 +3,15 @@ data/
 checkpoints/
 !data/*.py
 !*.py
+.DS_Store
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+=======
+*.swp
+*~
 
 # C extensions
 *.so
