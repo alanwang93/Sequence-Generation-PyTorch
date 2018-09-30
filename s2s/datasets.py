@@ -8,7 +8,7 @@ class DataConfig:
     def __init__(self):
         # default data root
         self.root = None
-        
+
         # suffix
         self.src = 'src'
         self.tgt = 'tgt'
@@ -17,34 +17,13 @@ class DataConfig:
         self.pad_token = '<PAD>'
         self.sos_token = '<SOS>'
         self.eos_token = '<EOS>'
+
+        self.pad_idx = 0
+        self.unk_idx = 1
+        self.sos_idx = 2
+        self.eos_idx = 3
+
         
-
-class Gigawords(DataConfig):
-
-    def __init__(self):
-        super().__init__()
-        self.name = 'Gigawords'
-        self.path = os.path.join(self.root, 'giga')
-
-        self.train_prefix = [os.path.join(self.path, 'train.article.txt')]
-        self.train_tgt = [os.path.join(self.path, 'train.title.txt')]
-        self.valid_src = [os.path.join(self.path, 'valid.article.txt')]
-        self.valid_tgt = [os.path.join(self.path, 'valid.title.txt')]
-        self.test_src = [os.path.join(self.path, 'test.article.txt')]
-        self.test_tgt = [os.path.join(self.path, 'test.title.txt')]
-
-        self.max_src_len = 100
-        self.max_tgt_len = 20
-
-        self.max_vocab = 200000
-        self.min_freq = 3
-    
-    def build_dataset(self, src_file, tgt_file, vocab):
-        class GigawordsDataset(Dataset):
-    
-
-
-
     def build_generator(self, src_file, tgt_file, vocab):
         def gen():
             with open(src_file, 'r') as s, open(tgt_file, 'r') as t:
@@ -67,17 +46,46 @@ class Gigawords(DataConfig):
                     yield example
         return gen
     
-    
 
     def build_corpus(self, src_file, tgt_file):
+        """
+        Build sklearn-style corpus
+        """
         corpus = []
         with open(src_file, 'r') as s, open(tgt_file, 'r') as t:
             for src, tgt in zip(s, t):
-                src = src.strip().lower()
-                tgt = tgt.strip().lower()
+                src = src.strip()
+                tgt = tgt.strip()
+                if self.lower:
+                    src, tgt = src.lower(), tgt.lower()
                 corpus.append(src.split())
                 corpus.append(tgt.split())
         return corpus
+
+
+class Gigawords(DataConfig):
+
+    def __init__(self):
+        super().__init__()
+        
+        self.name = 'Gigawords'
+        self.path = os.path.join(self.root, 'giga')
+
+        self.train_prefix = os.path.join(self.path, 'train') 
+        self.dev_prefix = os.path.join(self.path, 'dev') 
+        self.test_prefix = os.path.join(self.path, 'test') 
+        
+        # sentence
+        self.max_src_len = 100
+        self.max_tgt_len = 20
+        
+        # Vocabulary
+        self.share_vocab = False
+        self.max_src_vocab = 200000
+        self.max_tgt_vocab = 100000
+        self.min_freq = 3
+        self.lower = True
+
 
 
 

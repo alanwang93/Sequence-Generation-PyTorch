@@ -45,11 +45,12 @@ class Vocab:
             print("Loading vocab")
             self._load()
         elif data is not None:
+            
             self._init_vocab()
             print("Building vocab")
+            
             # Build vocab
-            allwords = list(itertools.chain.from_iterable(data))
-            self.freqs.update(allwords)
+            self.update(data)
 
             # Reference: torchtext
             min_freq = max(dc.min_freq, 1)
@@ -60,6 +61,7 @@ class Vocab:
             for word, freq in words_and_frequencies:
                 if not (freq < min_freq or len(self.itos) == max_vocab):
                     self.itos.append(word)
+ 
             self.stoi.update({tok: i for i, tok in enumerate(self.itos)})
             self._dump()
 
@@ -106,6 +108,10 @@ class Vocab:
         print(s)
         with open(os.path.join(self.path, 'vocab_summary.txt'), 'w') as f:
             f.write(s)
+
+        with open(os.path.join(self.path, 'vocab.txt'), 'w') as f:
+            for w in self.itos:
+                f.write(w + '\n')
 
 
     def __len__(self):
