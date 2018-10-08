@@ -9,30 +9,35 @@ import pickle
 import numpy as np
 
 def unk_idx():
-    return UNK_IDX
+    return 1
 
 class Vocab:
 
     """
     Vocabulary class
     """
-    def __init__(self, data_config):
+    def __init__(self, path, max_vocab, min_freq, prefix='all', \
+            unk_token='<UNK>', pad_token='<PAD>', sos_token='<SOS>', eos_token='<EOS>'):
         """
         Args:
-            data_config
+            dataset
         """
-        self.data_config = data_config
-        self.path = data_config.path
-        self.pad_token = data_config.pad_token
-        self.unk_token = data_config.unk_token
-        self.sos_token = data_config.sos_token
-        self.eos_token = data_config.eos_token
-        self.pad_idx=0, self.unk_idx=1, self.sos_idx=2, self.eos_idx=3
+        self.path = path
+        self.max_vocab = max_vocab
+        self.min_freq = min_freq
+        self.prefix = prefix
+
+        self.unk_token = unk_token
+        self.pad_token = pad_token
+        self.sos_token = sos_token
+        self.eos_token = eos_token
+
+        self.pad_idx, self.unk_idx, self.sos_idx, self.eos_idx = 0, 1, 2, 3
         self.tokens = self.freqs = self.itos = self.stoi = self.vectors =  None
         self.keys = ['tokens', 'freqs', 'itos', 'stoi', 'unk_token', \
                 'pad_token', 'sos_token', 'eos_token', 'vectors', \
-                'data_config', 'path', 'pad_idx', 'unk_idx', 'sos_idx', \
-                'eos_idx']
+                'path', 'max_vocab', 'min_freq', 'pad_idx', 'unk_idx', 'sos_idx', \
+                'eos_idx', 'prefix']
 
     def build(self, data=None, rebuild=True):
         """
@@ -40,10 +45,10 @@ class Vocab:
             data (list of token lists, or None)
             rebuild (boolean): Rebuild vocabulary
         """
-        dc = self.data_config
-        if not rebuild and os.path.exists(os.path.join(dc.path, 'vocab.pkl')):
+        if not rebuild and os.path.exists(os.path.join(self.path, '{0}_vocab.pkl'.format(self.prefix))):
             print("Loading vocab")
             self._load()
+
         elif data is not None:
             
             self._init_vocab()
@@ -53,13 +58,13 @@ class Vocab:
             self.update(data)
 
             # Reference: torchtext
-            min_freq = max(dc.min_freq, 1)
-            max_vocab = None if dc.max_vocab is None else dc.max_vocab + len(self.itos)
+            min_freq = max(self.min_freq, 1)
+            max_vocab = None if self.max_vocab is None else self.max_vocab + len(self.itos)
             words_and_frequencies = list(self.freqs.items())
             words_and_frequencies.sort(key=lambda tup: tup[1], reverse=True) # sort by order
 
             for word, freq in words_and_frequencies:
-                if not (freq < min_freq or len(self.itos) == max_vocab):
+                if not (freq < min_freq or len(self.itos) == max_vocab) and word not in self.itos:
                     self.itos.append(word)
  
             self.stoi.update({tok: i for i, tok in enumerate(self.itos)})
@@ -87,14 +92,13 @@ class Vocab:
         """
         Finish updating and rebuild vocabulary
         """
-        dc = self.data_config
-        min_freq = max(dc.min_freq, 1)
-        max_vocab = None if dc.max_vocab is None else dc.max_vocab + len(self.itos)
+        min_freq = max(self.min_freq, 1)
+        max_vocab = None if self.max_vocab is None else self.max_vocab + len(self.itos)
         words_and_frequencies = list(self.freqs.items())
         words_and_frequencies.sort(key=lambda tup: tup[1], reverse=True) # sort by order
 
         for word, freq in words_and_frequencies:
-            if not (freq < min_freq or len(self.itos) == max_vocab):
+            if not (freq < min_freq or len(self.itos) == max_vocab) and word not in self.itos:
                 self.itos.append(word)
         self.stoi.update({tok: i for i, tok in enumerate(self.itos)})
         self._dump()
@@ -103,13 +107,13 @@ class Vocab:
     def summary(self):
         s = "Vocabulary summary:\n"
         s += '  Vocab size:\t{0}\n'.format(len(self.itos))
-        s += '  Min freq:\t{0}\n'.format(self.data_config.min_freq)
-        s += '  Max vocab:\t{0}\n'.format(self.data_config.max_vocab)
+        s += '  Min freq:\t{0}\n'.format(self.min_freq)
+        s += '  Max vocab:\t{0}\n'.format(self.max_vocab)
         print(s)
-        with open(os.path.join(self.path, 'vocab_summary.txt'), 'w') as f:
+        with open(os.path.join(self.path, '{0}_vocab_summary.txt'.format(self.prefix)), 'w') as f:
             f.write(s)
 
-        with open(os.path.join(self.path, 'vocab.txt'), 'w') as f:
+        with open(os.path.join(self.path, '{0}_vocab.txt'.format(self.prefix)), 'w') as f:
             for w in self.itos:
                 f.write(w + '\n')
 
@@ -122,12 +126,12 @@ class Vocab:
         d = dict()
         for k in self.keys:
             d[k] = getattr(self, k)
-        with open(os.path.join(self.path, 'vocab.pkl'), 'wb') as f:
+        with open(os.path.join(self.path, '{0}_vocab.pkl'.format(self.prefix)), 'wb') as f:
             pickle.dump(d, f)
 
 
     def _load(self):
-        with open(os.path.join(self.path, 'vocab.pkl'), 'rb') as f:
+        with open(os.path.join(self.path, '{0}_vocab.pkl'.format(self.prefix)), 'rb') as f:
             d = pickle.load(f)
         for k in self.keys:
             setattr(self, k, d[k])
@@ -146,6 +150,11 @@ class Vocab:
             return [self.itos[w] for w in l]
         else:
             return self.itos[l]
+
+    
+    def to_full_idx(self, ):
+        # TODO
+        pass
 
 
 

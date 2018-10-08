@@ -21,6 +21,49 @@ from torch.nn.utils.rnn import pack_padded_sequence as pack
 INF = 1e10
 EPS = 1e-10
 
+
+
+class Embedding(nn.Module):
+
+    def __init__(self, embed_size, vocab, pretrained=None, \
+            pretrained_size=None, projection=False):
+        super().__init__()
+        self.embedding_size = embedding_size
+        self.projection = projection
+
+        self.embeddings = nn.Embedding(len(vocab), pretrained_size or embedding_size, \
+                padding_idx=vocab.pad_idx)
+        self.load_embeddings(vocab, pretrained, pretrained_size or embedding_size)
+        if projection:
+            self.embeddings.weight.requires_grad = False
+            self.projection = Feedforward(pretrained_size, embedding_size)
+        # self.dropout = nn.Dropout(0.2)
+
+    def forward(self, x, lengths=None):
+        embeddings = self.embeddings(x.cpu()).cuda().detach()
+        if self.projection: 
+            return self.projection(embeddings)
+        else:
+            return embeddings
+    
+    def load_embeddings(self, vocab, pretrained, embed_size):
+        weights = np.random.randn(len(vocab), embed_size)
+        weights[vocab.pad_idx] = 0.
+        # Glove
+        if pretrained is not None:
+            with open(pretrained, 'r') as f:
+                for line in f:
+                    s = line.strip().split(' ')
+                    word = s[0]
+                    if word.lower() in vocab.stoi:
+                        vector = np.asarray([float(s[i]) for i in range(1, len(s))])
+                        idx = vocab.stoi[word]
+                        if idx != vocab.pad_idx:
+                            weights[idx] = vector
+        self.embeddings.weight.data = weights
+
+
+
 class LSTMDecoder(nn.Module):
 
     def __init__(self, num_layers, input_size, rnn_size, dropout):
@@ -324,45 +367,6 @@ class Feedforward(nn.Module):
     def forward(self, x):
         return self.activation(self.linear(self.dropout(x)))
 
-
-class Embedding(nn.Module):
-
-    def __init__(self, embedding_size, vocab, pretrained=None, \
-            pretrained_size=None, projection=False):
-        super().__init__()
-        self.embedding_size = embedding_size
-        self.projection = projection
-
-        self.embeddings = nn.Embedding(len(vocab), pretrained_size or embedding_size, \
-                padding_idx=vocab.pad_idx)
-        self.load_embeddings(vocab, pretrained, pretrained_size or embedding_size)
-        if projection:
-            self.embeddings.weight.requires_grad = False
-            self.projection = Feedforward(pretrained_size, embedding_size)
-        # self.dropout = nn.Dropout(0.2)
-
-    def forward(self, x, lengths=None):
-        embeddings = self.embeddings(x.cpu()).cuda().detach()
-        if self.projection: 
-            return self.projection(embeddings)
-        else:
-            return embeddings
-    
-    def load_embeddings(self, vocab, pretrained, embed_size):
-        weights = np.random.randn(len(vocab), embed_size)
-        weights[vocab.pad_idx] = 0.
-        # Glove
-        if pretrained is not None:
-            with open(pretrained, 'r') as f:
-                for line in f:
-                    s = line.strip().split(' ')
-                    word = s[0]
-                    if word.lower() in vocab.stoi:
-                        vector = np.asarray([float(s[i]) for i in range(1, len(s))])
-                        idx = vocab.stoi[word]
-                        if idx != vocab.pad_idx:
-                            weights[idx] = vector
-        self.embeddings.weight.data = weights
 
 
 

@@ -5,40 +5,64 @@ import argparse
 import os
 
 from multiprocessing import Process
-import data_config
-from utils.vocab import Vocab
+import s2s.datasets as datasets
+from s2s.utils.vocab import Vocab
 
 def main(args):
-    assert args.config is not None
-    dc = getattr(data_config, args.config)()
 
-    if args.root is not None:
-        dc.root = args.root
+    dc = getattr(datasets, args.config)(args.data_root)
 
+    # Vocab files are under data path
     if args.vocab:
-        vocab = Vocab(data_config=dc)
-        vocab._init_vocab()
-        for src_file, tgt_file in zip(dc.train_src, dc.train_tgt):
-            print("Build vocab from {0}, {1}".format(src_file, tgt_file))
-            corpus = dc.build_corpus(src_file, tgt_file)
-            # Build Vocabualry
+        if dc.share_vocab:
+            vocab = Vocab(path=dc.path, max_vocab=dc.max_src_vocab, \
+                    min_freq=dc.min_freq, unk_token=dc.unk_token)
+            vocab._init_vocab()
+            src_file = '{0}.{1}'.format(dc.train_prefix, dc.src)
+            tgt_file = '{0}.{1}'.format(dc.train_prefix, dc.tgt)
+            corpus = dc.build_corpus(src_file)
+            corpus.extend(dc.build_corpus(tgt_file))
             vocab.update(corpus)
-        vocab._finish()
+            vocab._finish()
+            vocab.summary()
+        else:
+            src_vocab = Vocab(path=dc.path, max_vocab=dc.max_src_vocab, \
+                    min_freq=dc.min_freq, prefix='src', unk_token=dc.unk_token)
+            tgt_vocab = Vocab(path=dc.path, max_vocab=dc.max_tgt_vocab, \
+                    min_freq=dc.min_freq, prefix='tgt', unk_token=dc.unk_token)
+            src_file = '{0}.{1}'.format(dc.train_prefix, dc.src)
+            tgt_file = '{0}.{1}'.format(dc.train_prefix, dc.tgt)
+            src_corpus = dc.build_corpus(src_file)
+            tgt_corpus = dc.build_corpus(tgt_file)
+            src_vocab._init_vocab()
+            tgt_vocab._init_vocab()
+            src_vocab.update(src_corpus)
+            tgt_vocab.update(tgt_corpus)
+            src_vocab._finish()
+            tgt_vocab._finish()
+            src_vocab.summary()
+            tgt_vocab.summary()
+
     else:
-        print("Load vocab")
-        vocab = Vocab(data_config=dc)
-        vocab.build(rebuild=False)
+        if dc.share_vocab:
+            vocab = Vocab(path=dc.path, max_vocab=dc.max_src_vocab, \
+                    min_freq=dc.min_freq, unk_token=dc.unk_token)
+            vocab.build(rebuild=False)
+        else:
+            src_vocab = Vocab(path=dc.path, max_vocab=dc.max_src_vocab, \
+                    min_freq=dc.min_freq, prefix='src', unk_token=dc.unk_token)
+            src_vocab.build(rebuild=False)
+            tgt_vocab = Vocab(path=dc.path, max_vocab=dc.max_tgt_vocab, \
+                    min_freq=dc.min_freq, prefix='tgt', unk_token=dc.unk_token)
+            tgt_vocab.build(rebuild=False)
 
-    vocab.summary()
-
-    if args.extract:
-        pass
-        for (src, tgt) in [(dc.train_src, dc.train_tgt), \
-                (dc.valid_src, dc.valid_tgt), (dc.test_src, dc.test_tgt)]:
-            print("Build {0}, {1}".format(src, tgt))
-            dc.build_data(src, tgt, vocab)
+    # if args.extract:
+    #     pass
+    #     for (src, tgt) in [(dc.train_src, dc.train_tgt), \
+    #             (dc.valid_src, dc.valid_tgt), (dc.test_src, dc.test_tgt)]:
+    #         print("Build {0}, {1}".format(src, tgt))
+    #         dc.build_data(src, tgt, vocab)
         
-        #print("Extracting features")
         #file_list = dc.train_list + dc.valid_list + dc.test_list
         #processes = [Process(target=dc.extract, args=(f, vocab)) for f in file_list]
         #for p in processes:
@@ -56,7 +80,7 @@ if __name__ == '__main__':
             help='(Re)build vocabulary')
     # parser.add_argument('--embed', dest='embed', action='store_true')
     parser.add_argument('--extract', dest='extract', action='store_true')
-    parser.add_argument('--root', default=None, help='root directory')
+    parser.add_argument('--data_root', default=None, help='data root directory')
     args = parser.parse_args()
     main(args)
 
