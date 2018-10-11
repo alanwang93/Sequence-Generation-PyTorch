@@ -91,6 +91,7 @@ class RNNEncoder(Encoder):
         return last, output
 
 
+
 class CNNEncoder(Encoder):
 
     def __init__(self, config):

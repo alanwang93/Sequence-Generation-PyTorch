@@ -29,7 +29,7 @@ class Decoder(nn.Module):
         """ One-step computation
         
         Args:
-            inputs:
+            inputs: batch x 1 x dim
 
         Returns:
             output: hidden state of last layer
@@ -37,7 +37,6 @@ class Decoder(nn.Module):
         """
 
     def forward(self, inputs, lengths, hidden=None, context=None, context_lengths=None, tf_ratio=1.0):
-
         raise NotImplementedError()
 
     def init_weights(self):
@@ -59,5 +58,63 @@ class Decoder(nn.Module):
 
 class RNNDecoder(Decoder):
 
-    def __init__(self):
+    def __init__(self,
+            hidden_size,
+            num_layers,
+            embed_size,
+            vocab_size,
+            bidirectional=True,
+            pad_idx=0,
+            dropout=0.2,
+            embed_file=None):
+
         super().__init__()
+        
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.vocab_size = vocab_size
+        self.embed_size = embed_size
+        self.pad_idx = pad_idx
+        self.bidirectional = bidirectional
+        self.num_directions = 1 if bidirectional else 2
+        self.dropout = dropout
+        self.embed_file = embed_file
+
+        # TODO
+        self.embedding = nn.Embedding(
+                self.vocab_size,
+                self.embed_size,
+                padding_idx = self.pad_idx)
+
+        # TODO
+        self.rnn = nn.GRU(
+                input_size = self.embed_size,
+                hidden_size = self.hidden_size,
+                num_layers = self.num_layers,
+                batch_first=True,
+                dropout=dropout,
+                bidirectional=True)
+
+        # TODO: flexible hidden_size
+        self.linear_out = nn.Linear(
+                self.hidden_size,
+                self.vocab_size)
+
+    def step(self, inputs, hidden=None, context=None, context_lengths=None, tf_ratio=1.0):
+        inputs = self.embedding(inputs)
+        batch_size, _, _ = inputs.size()
+        # output: (batch, 1, hidden_size)
+        output, h_n = self.rnn(inputs, hidden)
+        logit = self.linear_out(output)# (batch, 1, vocab_size)
+        return logit, output, h_n
+
+    def forward(self, inputs, lengths, hidden=None, context=None, context_lengths=None, tf_ratio=1.0):
+        batch_size, seq_len, _ = inputs.size()
+        inputs = inputs.split(seq_len)
+        logits = []
+        for inp in inputs:
+            logit, output, hidden = self.step(inp, hidden)
+            logits.append(logit)
+        logits = torch.cat(logits, dim=1)
+        return logits
+

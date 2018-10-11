@@ -13,3 +13,10 @@ class Test(Config):
     def __init__(self):
         super().__init__()
         self.dataset = TestData('/Users/wangyifan/workspace/research/sequence-to-sequence/data')
+
+
+class Seq2seq_Gigaword(Config):
+    
+    def __init__(self):
+        super().__init__()
+        self.dataset = Gigaword()
