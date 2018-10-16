@@ -89,8 +89,8 @@ def build_dataloaders(config, src_vocab, tgt_vocab):
                     i += 1
                     if i % 1000 == 0:
                         print(i)
-                    str_src = src.strip().split(' ')[:max_len_src]
-                    str_tgt = tgt.strip().split(' ')[:max_len_tgt-1] # max_len_tgt == final idx tensor length
+                    str_src = src.strip().lower().split(' ')[:max_len_src]
+                    str_tgt = tgt.strip().lower().split(' ')[:max_len_tgt-1] # max_len_tgt == final idx tensor length
                     len_src = len(str_src)
                     len_tgt = len(str_tgt)+1 # including EOS or SOS
                     src = src_vocab.toi(str_src)

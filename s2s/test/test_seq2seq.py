@@ -21,14 +21,26 @@ def test(args):
     cf.tgt_vocab_size = len(tgt_vocab)
 
     train, dev, test = build_dataloaders(cf, src_vocab, tgt_vocab)
-    iter_train = iter(train)
+    # iter_train = iter(train)
+    
 
     # model
     model = Seq2seq(cf)
     
-    for i, batch in enumerate(iter_train):
-        loss = model.train_step(batch)
-        print(i, loss)
+    print('Test training')
+    for _ in range(200):
+        for i, batch in enumerate(test):
+            loss = model.train_step(batch)
+            print(i, loss)
+            # logits = self.forward(batch)
+            preds = model.greedy_decode(batch)
+            print(i, preds[:4])
+
+    # print('Test greedy decoding')
+    # iter_train = iter(train)
+    # for i, batch in enumerate(iter_train):
+    #     preds = model.greedy_decode(batch)
+    #     print(i, preds)
         
 
 

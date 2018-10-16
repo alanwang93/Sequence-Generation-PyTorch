@@ -13,6 +13,7 @@ import time
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 """
@@ -46,7 +47,35 @@ class Decoder(nn.Module):
         pass
 
 
-    def greedy_decode(self, inputs, lengths, hidden=None, context=None, context_lengths=None):
+    def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=10):
+        """
+        inputs (batch, 1, dim)
+        """
+        batch_size = hidden.size(1)
+        logits = []
+        preds = []
+        inp = sos_idx * torch.ones((batch_size, 1), dtype=torch.long)
+        while True:
+            # print('hidden', hidden[:4])
+            # print('inp', inp[:4])
+
+            logit, output, hidden = self.step(inp, hidden)
+            # print('logit1', logit)
+            # logit2 = self.forward(inp, )
+            # if len(preds) == 0:
+                # print('decode', logit)
+            # print('logit', logit[:4])
+            logp = F.log_softmax(logit, dim=2)
+            maxv, maxidx = torch.max(logp, dim=2)
+            if ((maxidx == eos_idx).all() and len(preds) > 0)  or len(preds) >= max_length:
+                break
+            logits.append(logit)
+            preds.append(maxidx.numpy())
+            inp = maxidx
+        logits = torch.cat(logits, dim=1)
+        preds = np.concatenate(preds, 1)
+        # print(preds.shape)
+        return preds
         
     
     def beam_search(self, inputs, lengths, hidden=None, context=None, context_lengths=None):
@@ -108,14 +137,15 @@ class RNNDecoder(Decoder):
         logit = self.linear_out(output)# (batch, 1, vocab_size)
         return logit, output, h_n
 
-    def forward(self, inputs, lengths, hidden=None, context=None, context_lengths=None, tf_ratio=1.0):
-        
+    def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
         batch_size, seq_len = inputs.size()
-        inputs = inputs.split(seq_len, 1)
+        inputs = inputs.split(1, 1)
         logits = []
         for inp in inputs:
+            # print('inp', inp[:3])
             logit, output, hidden = self.step(inp, hidden)
             logits.append(logit)
         logits = torch.cat(logits, dim=1)
+        # print('train', logits)
         return logits
 

@@ -116,7 +116,7 @@ class TestData(DataConfig):
         self.share_vocab = False
         self.max_src_vocab = 200000
         self.max_tgt_vocab = 100000
-        self.min_freq = 3
+        self.min_freq = 1
         self.lower = True    
 
         self.unk_token = 'unk'
