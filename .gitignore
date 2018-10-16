@@ -1,6 +1,6 @@
 # project
 data/
-s2s/test/
+# s2s/test/
 checkpoints/
 !data/*.py
 !*.py

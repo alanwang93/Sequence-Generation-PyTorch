@@ -25,7 +25,18 @@ class DataConfig:
         self.sos_idx = 2
         self.eos_idx = 3
 
+        # sentence
+        self.max_len_src = 100
+        self.max_len_tgt = 20
         
+        # Vocabulary
+        self.share_vocab = False
+        self.max_vocab_src = 200000
+        self.max_vocab_tgt = 100000
+        self.min_freq = 3
+        self.lower = True
+
+
     def build_generator(self, src_file, tgt_file, vocab):
         def gen():
             with open(src_file, 'r') as s, open(tgt_file, 'r') as t:

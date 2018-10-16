@@ -21,8 +21,8 @@ Encoder
 
 class Decoder(nn.Module):
     
-    def __init__(self, config):
-        nn.Module.__init__()
+    def __init__(self):
+        super().__init__()
 
 
     def step(self, inputs, lengths, hidden=None, context=None, context_lengths=None, tf_ratio=1.0):
@@ -47,7 +47,7 @@ class Decoder(nn.Module):
 
 
     def greedy_decode(self, inputs, lengths, hidden=None, context=None, context_lengths=None):
-        pass
+        
     
     def beam_search(self, inputs, lengths, hidden=None, context=None, context_lengths=None):
         pass
@@ -97,10 +97,10 @@ class RNNDecoder(Decoder):
 
         # TODO: flexible hidden_size
         self.linear_out = nn.Linear(
-                self.hidden_size,
+                self.hidden_size*2 if self.bidirectional else self.hidden_size,
                 self.vocab_size)
 
-    def step(self, inputs, hidden=None, context=None, context_lengths=None, tf_ratio=1.0):
+    def step(self, inputs, hidden=None, context=None, context_lengths=None):
         inputs = self.embedding(inputs)
         batch_size, _, _ = inputs.size()
         # output: (batch, 1, hidden_size)
@@ -109,8 +109,9 @@ class RNNDecoder(Decoder):
         return logit, output, h_n
 
     def forward(self, inputs, lengths, hidden=None, context=None, context_lengths=None, tf_ratio=1.0):
-        batch_size, seq_len, _ = inputs.size()
-        inputs = inputs.split(seq_len)
+        
+        batch_size, seq_len = inputs.size()
+        inputs = inputs.split(seq_len, 1)
         logits = []
         for inp in inputs:
             logit, output, hidden = self.step(inp, hidden)
