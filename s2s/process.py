@@ -14,6 +14,7 @@ def main(args):
 
     # Vocab files are under data path
     if args.vocab:
+        print('Building vocab')
         if dc.share_vocab:
             vocab = Vocab(path=dc.path, max_vocab=dc.max_src_vocab, \
                     min_freq=dc.min_freq, unk_token=dc.unk_token)
@@ -44,6 +45,7 @@ def main(args):
             tgt_vocab.summary()
 
     else:
+        print('Loading vocab')
         if dc.share_vocab:
             vocab = Vocab(path=dc.path, max_vocab=dc.max_src_vocab, \
                     min_freq=dc.min_freq, unk_token=dc.unk_token)
