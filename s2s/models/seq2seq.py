@@ -10,11 +10,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from s2s.models.common import BaseModel
+# from s2s.models.common import BaseModel
 from s2s.models.encoder import RNNEncoder
 from s2s.models.decoder import RNNDecoder
 
-class Seq2seq(BaseModel):
+class Seq2seq(nn.Module):
     def __init__(self, config):
         cf = config
         dc = cf.dataset
