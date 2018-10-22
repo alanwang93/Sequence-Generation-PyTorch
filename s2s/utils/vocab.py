@@ -16,30 +16,42 @@ class Vocab:
     """
     Vocabulary class
     """
-    def __init__(self, path, max_vocab, min_freq, prefix='all', \
-            unk_token='<UNK>', pad_token='<PAD>', sos_token='<SOS>', eos_token='<EOS>'):
+    def __init__(self, 
+            path, 
+            max_vocab, 
+            min_freq, 
+            pad_token='<PAD>',
+            unk_token='<UNK>',
+            sos_token='<SOS>',
+            eos_token='<EOS>',
+            prefix='all',
+            ):
         """
         Args:
-            dataset
         """
         self.path = path
         self.max_vocab = max_vocab
         self.min_freq = min_freq
-        self.prefix = prefix
 
         self.unk_token = unk_token
         self.pad_token = pad_token
         self.sos_token = sos_token
         self.eos_token = eos_token
 
-        self.pad_idx, self.unk_idx, self.sos_idx, self.eos_idx = 0, 1, 2, 3
-        self.tokens = self.freqs = self.itos = self.stoi = self.vectors =  None
-        self.keys = ['tokens', 'freqs', 'itos', 'stoi', 'unk_token', \
-                'pad_token', 'sos_token', 'eos_token', 'vectors', \
-                'path', 'max_vocab', 'min_freq', 'pad_idx', 'unk_idx', 'sos_idx', \
-                'eos_idx', 'prefix']
+        self.pad_idx, self.unk_idx = 0, 1
+        self.sos_idx, self.eos_idx = 2, 3
 
-    def build(self, data=None, rebuild=True):
+        self.prefix = prefix
+
+        self.tokens = self.freqs = self.itos = self.stoi = None
+        
+        self.keys = ['path', 'max_vocab', 'min_freq',
+                'pad_idx', 'unk_idx', 'sos_idx', 'eos_idx', 
+                'unk_token', 'pad_token', 'sos_token', 'eos_token', 
+                'tokens', 'freqs', 'itos', 'stoi',
+                'prefix']
+
+    def build(self, rebuild=True, data=None):
         """
         Args:
             data (list of token lists, or None)
@@ -54,7 +66,6 @@ class Vocab:
             self._init_vocab()
             print("Building vocab")
             
-            # Build vocab
             self.update(data)
 
             # Reference: torchtext
@@ -69,6 +80,9 @@ class Vocab:
  
             self.stoi.update({tok: i for i, tok in enumerate(self.itos)})
             self._dump()
+
+        else:
+            raise ValueError('Please provide data to build vocabulary')
 
 
     def _init_vocab(self):
@@ -137,19 +151,12 @@ class Vocab:
             setattr(self, k, d[k])
 
 
-    def toi(self, l):
-        # TODO: it's wrong, because str has __len__()
-        if hasattr(l, '__len__') and type(l) is not str:
-            return [self.stoi[w] for w in l]
-        else:
-            return self.stoi[l]
+    def toi(self, seq):
+        return [self.stoi[word] for word in seq]
 
 
-    def tos(self, l):
-        if hasattr(l, '__len__'):
-            return [self.itos[w] for w in l]
-        else:
-            return self.itos[l]
+    def tos(self, seq):
+        return [self.itos[idx] for idx in seq]
 
     
     def to_full_idx(self, ):
