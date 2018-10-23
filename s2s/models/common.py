@@ -22,36 +22,65 @@ INF = 1e10
 EPS = 1e-10
 
 
+class Feedforward(nn.Module):
+
+    def __init__(self, d_in, d_out, activation=None, bias=True):
+        super().__init__()
+        if activation is not None:
+            self.activation = getattr(F, activation)
+        else:
+            self.activation = lambda x: x
+        self.linear = Linear(d_in, d_out, bias=bias)
+
+    def forward(self, x):
+        return self.activation(self.linear(x))
+
 
 class Embedding(nn.Module):
 
     def __init__(self, embed_size, vocab, pretrained=None, \
             pretrained_size=None, projection=False):
+        """
+        1. use pretrained embedding
+            1.1 with projection => embed_size 
+            1.2 without projection
+        2. no pretrained embedding
+        """
         super().__init__()
-        self.embedding_size = embedding_size
+        self.embed_size = embed_size
+        self.vocab = vocab
         self.projection = projection
+        self.vocab_size = len(vocab)
+        self.pretrained = pretrained
+        self.pretrained_size = pretrained_size
 
-        self.embeddings = nn.Embedding(len(vocab), pretrained_size or embedding_size, \
+        if pretrained is not None:
+            assert pretrained_size is not None
+            if not projection:
+                assert pretrained_size == embed_size
+
+        self.embeddings = nn.Embedding(self.vocab_size, pretrained_size or embed_size, \
                 padding_idx=vocab.pad_idx)
-        self.load_embeddings(vocab, pretrained, pretrained_size or embedding_size)
+        self.load_embeddings()
+
         if projection:
             self.embeddings.weight.requires_grad = False
-            self.projection = Feedforward(pretrained_size, embedding_size)
+            self.projection_layer = Feedforward(d_in=pretrained_size, d_out=embed_size)
         # self.dropout = nn.Dropout(0.2)
 
     def forward(self, x, lengths=None):
-        embeddings = self.embeddings(x.cpu()).cuda().detach()
+        embeddings = self.embeddings(x)
         if self.projection: 
-            return self.projection(embeddings)
+            return self.projection_layer(embeddings)
         else:
             return embeddings
     
-    def load_embeddings(self, vocab, pretrained, embed_size):
-        weights = np.random.randn(len(vocab), embed_size)
-        weights[vocab.pad_idx] = 0.
+    def load_embeddings(self):
+        weights = np.random.randn(self.vocab_size, self.pretrained_size or self.embed_size)
+        weights[self.vocab.pad_idx] = 0.
         # Glove
-        if pretrained is not None:
-            with open(pretrained, 'r') as f:
+        if self.pretrained is not None:
+            with open(self.pretrained, 'r') as f:
                 for line in f:
                     s = line.strip().split(' ')
                     word = s[0]
@@ -60,7 +89,6 @@ class Embedding(nn.Module):
                         idx = vocab.stoi[word]
                         if idx != vocab.pad_idx:
                             weights[idx] = vector
-        self.embeddings.weight.data = weights
 
 
 
@@ -69,7 +97,7 @@ class LSTMDecoder(nn.Module):
     def __init__(self, num_layers, input_size, rnn_size, dropout):
         super(LSTMDecoder, self).__init__()
         self.dropout = nn.Dropout(dropout)
-        self.num_layers = num_layers
+        self.num_layers = num_layers 
         self.layers = nn.ModuleList()
 
         for i in range(num_layers):

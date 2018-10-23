@@ -10,13 +10,13 @@ from s2s.utils.vocab import Vocab
 
 def main(args):
 
-    dc = getattr(datasets, args.config)(args.data_root)
+    dc = getattr(datasets, args.config)(args.data_path)
 
-    # Vocab files are under data path
+    # Vocab files are under model path
     if args.vocab:
         print('Building vocab')
         if dc.share_vocab:
-            vocab = Vocab(path=dc.path, max_vocab=dc.max_src_vocab, \
+            vocab = Vocab(path=args.model_path, max_vocab=dc.max_src_vocab, \
                     min_freq=dc.min_freq, unk_token=dc.unk_token)
             vocab._init_vocab()
             src_file = '{0}.{1}'.format(dc.train_prefix, dc.src)
@@ -27,9 +27,9 @@ def main(args):
             vocab._finish()
             vocab.summary()
         else:
-            src_vocab = Vocab(path=dc.path, max_vocab=dc.max_src_vocab, \
+            src_vocab = Vocab(path=args.model_path, max_vocab=dc.max_src_vocab, \
                     min_freq=dc.min_freq, prefix='src', unk_token=dc.unk_token)
-            tgt_vocab = Vocab(path=dc.path, max_vocab=dc.max_tgt_vocab, \
+            tgt_vocab = Vocab(path=args.model_path, max_vocab=dc.max_tgt_vocab, \
                     min_freq=dc.min_freq, prefix='tgt', unk_token=dc.unk_token)
             src_file = '{0}.{1}'.format(dc.train_prefix, dc.src)
             tgt_file = '{0}.{1}'.format(dc.train_prefix, dc.tgt)
@@ -82,7 +82,8 @@ if __name__ == '__main__':
             help='(Re)build vocabulary')
     # parser.add_argument('--embed', dest='embed', action='store_true')
     parser.add_argument('--extract', dest='extract', action='store_true')
-    parser.add_argument('--data_root', default=None, help='data root directory')
+    parser.add_argument('--data_path', default=None, help='data root directory')
+    parser.add_argument('--model_path', default=None, help='model root directory')
     args = parser.parse_args()
     main(args)
 

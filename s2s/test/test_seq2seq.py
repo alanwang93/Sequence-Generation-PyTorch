@@ -25,16 +25,16 @@ def test(args):
     
 
     # model
-    model = Seq2seq(cf)
+    model = Seq2seq(cf, src_vocab, tgt_vocab)
     
     print('Test training')
     for _ in range(200):
-        for i, batch in enumerate(test):
+        for i, batch in enumerate(train):
             loss = model.train_step(batch)
             print(i, loss)
             # logits = self.forward(batch)
             preds = model.greedy_decode(batch)
-            print(i, preds[:4])
+            # print(i, preds[:4])
 
     # print('Test greedy decoding')
     # iter_train = iter(train)

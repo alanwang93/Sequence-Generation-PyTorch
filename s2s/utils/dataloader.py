@@ -38,15 +38,6 @@ def dict_collate_fn(batch):
             data[k].append(d[k])
     for k in keys:
         data[k] = torch.from_numpy(np.asarray(data[k]))
-    #data['src'] = pad_sequence(data['src'], True, 0)
-    #data['tgt_in'] = pad_sequence(data['tgt_in'], True, 0)
-    #data['tgt_out'] = pad_sequence(data['tgt_out'], True, 0)
-    #data['src'] = torch.stack(data['src'])
-    #data['tgt_in'] = torch.stack(data['tgt_in'])
-    #data['tgt_out'] = torch.stack(data['tgt_out'])
-    
-    #data['len_src'] = torch.stack(data['len_src'])
-    #data['len_tgt'] = torch.stack(data['len_tgt'])
     return data
 
 

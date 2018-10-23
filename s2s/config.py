@@ -4,16 +4,16 @@
 from s2s.datasets import *
 
 class Config:
-    def __init__(self, data_root):
-        self.data_root = data_root
+    def __init__(self, data_path, model_path):
+        self.data_path = data_path
         self.batch_size = 64
 
 
 class Test(Config):
 
-    def __init__(self, data_root):
-        super().__init__(data_root)
-        self.dataset = TestData(data_root)
+    def __init__(self, data_path, model_path):
+        super().__init__(data_path, model_path)
+        self.dataset = TestData(data_path)
 
         self.hidden_size = 100
         self.num_layers = 1
@@ -21,10 +21,13 @@ class Test(Config):
         self.bidirectional = True
         self.dropout = 0.2
         self.rnn_dropout = 0
-        self.embed_file = None
+        # embedding
+        self.pretrained = None
+        self.pretrained_size = None
+        self.projection = False
 
 class Seq2seq_Gigaword(Config):
     
-    def __init__(self, data_root):
-        super().__init__(data_root)
-        self.dataset = Gigaword(data_root)
+    def __init__(self, data_path, model_path):
+        super().__init__(data_path, model_path)
+        self.dataset = Gigaword(data_path)

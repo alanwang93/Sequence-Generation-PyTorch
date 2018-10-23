@@ -13,6 +13,11 @@ import time
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.nn.utils.rnn import pad_packed_sequence as unpack
+from torch.nn.utils.rnn import pack_padded_sequence as pack
+
+from s2s.models.common import Feedforward, Embedding
+
 
 
 """
@@ -41,29 +46,36 @@ class RNNEncoder(Encoder):
             hidden_size,
             num_layers,
             embed_size,
-            vocab_size,
+            vocab,
             bidirectional=True,
-            pad_idx=0,
             dropout=0.2,
-            embed_file=None):
+            pretrained=None,
+            pretrained_size=None,
+            projection=False):
 
         super().__init__()
         
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.vocab_size = vocab_size
         self.embed_size = embed_size
-        self.pad_idx = pad_idx
+        self.vocab = vocab
+        self.vocab_size = len(vocab)
+        self.pad_idx = vocab.pad_idx
         self.bidirectional = bidirectional
-        self.num_directions = 1 if bidirectional else 2
+        self.num_directions = 2 if bidirectional else 1
         self.dropout = dropout
-        self.embed_file = embed_file
+        # embedding
+        self.pretrained = pretrained
+        self.pretrained_size = pretrained_size
+        self.projection = projection
 
-        # TODO
-        self.embedding = nn.Embedding(
-                self.vocab_size,
+        self.embedding = Embedding(
                 self.embed_size,
-                padding_idx = self.pad_idx)
+                self.vocab,
+                self.pretrained,
+                self.pretrained_size,
+                self.projection)
+
 
         # TODO
         self.rnn = nn.GRU(
@@ -80,15 +92,23 @@ class RNNEncoder(Encoder):
             last (batch_size, hidden_size)
             output (batch_size, seq_len, hidden_size)
         """
+        concat_output = False
         inputs = self.embedding(inputs)
-        batch_size, seq_len, _ = inputs.size()
-        output, h_n = self.rnn(inputs, hidden)
+        lens, indices = torch.sort(lengths, 0, True)
+        inputs = inputs[indices]
+        outputs, h_n = self.rnn(pack(inputs, lens, 
+                batch_first=True), hidden)
+        outputs = unpack(outputs, batch_first=True)[0]
+        _, _indices = torch.sort(indices, 0)
+        outputs = outputs[_indices]
         if not concat_output:
-            output = output.view(seq_len, batch_size, self.num_directions, self.hidden_size)
-            output = torch.mean(output, 2)
-        masks = (lengths-1).view(-1, 1, 1).expand(batch_size, 1, output.size(2))
-        last = torch.gather(output, 1, masks)
-        return last, output
+            h_n = h_n.view(self.num_layers, self.num_directions, inputs.size(0), self.hidden_size)
+            h_n = torch.mean(h_n, 1)
+        # print(h_n.size())
+        # print(outputs.size*)
+        # masks = (lengths-1).view(-1, 1, 1).expand(batch_size, 1, output.size(2))
+        # last = torch.gather(output, 1, masks)
+        return h_n, outputs
 
 
 

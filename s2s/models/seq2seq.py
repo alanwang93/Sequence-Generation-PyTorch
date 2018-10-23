@@ -16,7 +16,7 @@ from s2s.models.encoder import RNNEncoder
 from s2s.models.decoder import RNNDecoder
 
 class Seq2seq(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, src_vocab, tgt_vocab):
         super().__init__()
         cf = config
         dc = cf.dataset
@@ -24,26 +24,30 @@ class Seq2seq(nn.Module):
         self.config = config
         self.sos_idx = dc.sos_idx
         self.eos_idx = dc.eos_idx
+        self.src_vocab = src_vocab
+        self.tgt_vocab = tgt_vocab
 
         self.encoder = RNNEncoder(
                 cf.hidden_size,
                 cf.num_layers,
                 cf.embed_size,
-                cf.src_vocab_size,
+                src_vocab,
                 cf.bidirectional,
-                pad_idx=0,
-                dropout=cf.rnn_dropout,
-                embed_file=cf.embed_file)
+                cf.rnn_dropout,
+                cf.pretrained,
+                cf.pretrained_size,
+                cf.projection)
 
         self.decoder = RNNDecoder(
                 cf.hidden_size,
                 cf.num_layers,
                 cf.embed_size,
-                cf.tgt_vocab_size,
-                cf.bidirectional,
-                pad_idx=0,
-                dropout=cf.rnn_dropout,
-                embed_file=cf.embed_file)
+                tgt_vocab,
+                # cf.bidirectional,
+                cf.rnn_dropout,
+                cf.pretrained,
+                cf.pretrained_size,
+                cf.projection)
 
         self.num_directions = 2 if cf.bidirectional else 1
 
@@ -56,16 +60,12 @@ class Seq2seq(nn.Module):
         src, len_src = batch['src'], batch['len_src']
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
         src_last, src_output = self.encoder(src, len_src)
-        batch_size = src_last.size(0)
-        init_hidden = src_last.view(batch_size, self.num_directions, -1).transpose(0, 1)
-        logits = self.decoder(tgt_in, len_tgt, init_hidden)
+        logits = self.decoder(tgt_in, len_tgt, src_last)
         return logits
 
     def train_step(self, batch):
         logits = self.forward(batch)
         batch_size, seq_len, _ = logits.size()
-        maxidx = torch.argmax(logits, 2)
-        print(maxidx[:4])
         loss = self.loss(input=logits.view(batch_size*seq_len, -1), target=batch['tgt_out'].view(-1))
         self.optimizer.zero_grad()
         loss.backward()
@@ -76,12 +76,7 @@ class Seq2seq(nn.Module):
         src, len_src = batch['src'], batch['len_src']
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
         src_last, src_output = self.encoder(src, len_src)
-        batch_size = src_last.size(0)
-        # print(222, src_last)
-        init_hidden = src_last.view(batch_size, self.num_directions, -1).transpose(0, 1)
-        preds = self.decoder.greedy_decode(init_hidden, self.sos_idx, self.eos_idx)
+        preds = self.decoder.greedy_decode(src_last, self.sos_idx, self.eos_idx)
         return preds
-
-
 
     
