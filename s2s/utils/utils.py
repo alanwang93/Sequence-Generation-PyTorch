@@ -18,3 +18,22 @@ def update_config(config, params):
             setattr(config, param, value)
         else:
             raise AttributeError()
+
+def init_logging(log_name):
+    """
+    """
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(module)s: %(message)s',
+            datefmt='%m/%d/%Y %H:%M:%S'   )
+    handler = logging.FileHandler(log_name)
+    out = logging.StreamHandler(sys.stdout)
+
+    handler.setFormatter(formatter)
+    out.setFormatter(formatter)
+    out.setLevel(logging.INFO)
+    logging.getLogger().addHandler(handler)
+    logging.getLogger().addHandler(out)
+    logging.getLogger().setLevel(logging.INFO)
+    return logging
+
+def save_checkpoint(obj, is_best):
+    
