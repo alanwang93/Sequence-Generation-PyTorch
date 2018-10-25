@@ -4,6 +4,7 @@
 import argparse
 import pickle
 import os
+import itertools
 
 import torch
 
@@ -15,17 +16,17 @@ from s2s.utils.utils import update_config
 
 def train(args):
 
-    config_path = os.path.join(args.restore, 'config.pkl')
     if args.restore is not None:
+        config_path = os.path.join(args.restore, 'config.pkl')
         assert os.path.exists(config_path)
         # restore config
-        config = pickle.load(config_path)
+        cf = pickle.load(config_path)
     else:
-        cf = getattr(config, args.config)(args.data_root)
+        cf = getattr(config, args.config)(args.data_path. args.model_path)
 
     if args.params is not None:
         # update config
-        update_config(config=cf, args.params)
+        update_config(config=cf, params=args.params)
     # save config
     pickle.dump(config_path)
 
@@ -60,23 +61,31 @@ def train(args):
 
         model.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state'])
-        epoch = checkpoint['epoch']
         step = checkpoint['step']
         best_valid_metric = checkpoint['best_valid_metric']
         best_test_metric = checkpoint['best_test_metric']
         best_step = checkpoint['best_step']
     else:
-        epoch = 1
-        step = 1
+        step = 0
         best_valid_metric = cf.init_metric
         best_test_metric = cf.init_metric
-        best_step = 1
+        best_step = 0
 
+    
+    stop_train = False
 
-
-    for _ in range(200):
+    for epoch in itertools.count():
         for i, batch in enumerate(train):
             loss = model.train_step(batch)
-            print(i, loss)
+            step += 1
+            print(step, i, loss)
             # logits = self.forward(batch)
             preds = model.greedy_decode(batch)
+
+
+            if step >= cf.max_step:
+                # stop training
+                stop_train = True
+                break
+        if stop_train:
+            break

@@ -7,6 +7,7 @@ class Config:
     def __init__(self, data_path, model_path):
         self.data_path = data_path
         self.batch_size = 64
+        self.max_step = 20000
 
 
 class Test(Config):

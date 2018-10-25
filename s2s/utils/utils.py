@@ -36,4 +36,4 @@ def init_logging(log_name):
     return logging
 
 def save_checkpoint(obj, is_best):
-    
+    pass
