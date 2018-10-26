@@ -45,7 +45,8 @@ class Vocab:
 
         self.tokens = self.freqs = self.itos = self.stoi = None
         
-        self.keys = ['path', 'max_vocab', 'min_freq',
+        self.keys = [
+                'path', 'max_vocab', 'min_freq',
                 'pad_idx', 'unk_idx', 'sos_idx', 'eos_idx', 
                 'unk_token', 'pad_token', 'sos_token', 'eos_token', 
                 'tokens', 'freqs', 'itos', 'stoi',
@@ -57,15 +58,14 @@ class Vocab:
             data (list of token lists, or None)
             rebuild (boolean): Rebuild vocabulary
         """
+
         if not rebuild and os.path.exists(os.path.join(self.path, '{0}_vocab.pkl'.format(self.prefix))):
-            print("Loading vocab")
+            print("Loading vocab from {0}".format(self.path))
             self._load()
 
         elif data is not None:
-            
             self._init_vocab()
-            print("Building vocab")
-            
+            print("Building vocab to {}".format(self.path))
             self.update(data)
 
             # Reference: torchtext
@@ -116,6 +116,36 @@ class Vocab:
                 self.itos.append(word)
         self.stoi.update({tok: i for i, tok in enumerate(self.itos)})
         self._dump()
+
+
+    def build_bpe(self, corpus, n_merges):
+
+        def get_pairs(freqs):
+            pairs = collections.defaultdict(int)
+            for word, freq in freqs.items():
+                symbols = word.split()
+                for i in range(len(symbols)-1):
+                    pairs[symbols[i], symbols[i+1]] += freq
+            return pairs
+
+        def merge_vocab(pair, v_in):
+            v_out = {}
+            bigram = re.escape(' '.join(pair))
+            p = re.compile(r'(?<!\S)' + bigram + r'(?!\S)')
+            for word in v_in:
+                w_out = p.sub(''.join(pair), word)
+                v_out[w_out] = v_in[word]
+            return v_out
+
+        self.merges = []
+        freqs = self.freqs
+        for i in range(num_meregs):
+            pairs = get_pairs(freqs)
+            best = max(pairs, key=pairs.get)
+            self.merges.append(best)
+            freqs = merge_vocab(best, freqs)
+            print(best)
+
 
 
     def summary(self):
