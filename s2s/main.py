@@ -13,7 +13,6 @@ def main(args):
         raise ValueError()
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', type=str, default='train')
