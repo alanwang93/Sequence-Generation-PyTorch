@@ -79,7 +79,7 @@ def build_dataloaders(config, src_vocab, tgt_vocab):
                 for src, tgt in zip(s, t):
                     i += 1
                     if i % 1000 == 0:
-                        print(i)
+                        print(i, flush=True)
                     str_src = src.strip().lower().split(' ')[:max_len_src]
                     str_tgt = tgt.strip().lower().split(' ')[:max_len_tgt-1] # max_len_tgt == final idx tensor length
                     len_src = len(str_src)

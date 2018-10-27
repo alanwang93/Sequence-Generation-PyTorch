@@ -16,32 +16,41 @@ from s2s.utils.utils import update_config
 
 def train(args):
 
+    model_path = os.path.join(args.model_root, args.config, args.suffix)
+    if not os.path.exists(model_path):
+        os.makedirs(model_path)
+
+    config_path = os.path.join(model_path, 'config.pkl')
     if args.restore is not None:
-        config_path = os.path.join(args.restore, 'config.pkl')
         assert os.path.exists(config_path)
         # restore config
         cf = pickle.load(config_path)
     else:
-        cf = getattr(config, args.config)(args.data_path. args.model_path)
+        cf = getattr(config, args.config)(args.data_root, model_path)
 
     if args.params is not None:
         # update config
         update_config(config=cf, params=args.params)
     # save config
-    pickle.dump(config_path)
+    pickle.dump(cf, open(config_path, 'wb'))
 
     dc = cf.dataset
-    src_vocab = Vocab(args.model_path, dc.max_vocab_src, dc.min_freq, prefix='src')
-    tgt_vocab = Vocab(args.model_path, dc.max_vocab_tgt, dc.min_freq, prefix='tgt')
-
-    if not os.path.exists(os.path.join(args.model_path, 'src_vocab.pkl')) or args.vocab:
-        # rebuild vocab
+    
+    # TODO: BPE
+    src_vocab = Vocab(model_path, dc.max_vocab_src, dc.min_freq, prefix='src')
+    tgt_vocab = Vocab(model_path, dc.max_vocab_tgt, dc.min_freq, prefix='tgt')
+    if args.vocab:
         rebuild = True
+        src_file = '{0}.{1}'.format(dc.train_prefix, dc.src)
+        tgt_file = '{0}.{1}'.format(dc.train_prefix, dc.tgt)
+        corpus = dc.build_corpus(src_file)
+        corpus.extend(dc.build_corpus(tgt_file))
     else:
         rebuild = False
-
-    src_vocab.build(rebuild=rebuild)
-    tgt_vocab.build(rebuild=rebuild)
+        corpus = None
+    
+    src_vocab.build(rebuild, corpus)
+    tgt_vocab.build(rebuild, corpus)
     # cf.src_vocab = src_vocab
     # cf.tgt_vocab = tgt_vocab
     cf.src_vocab_size = len(src_vocab)
@@ -51,13 +60,11 @@ def train(args):
 
     # model
     model = getattr(models, cf.model)(cf, src_vocab, tgt_vocab)
-    optimizer = getattr(torch.optim , cf.optimizer)(cf.optimizer_kwargs)
+    optimizer = getattr(torch.optim , cf.optimizer)(model.parameters(), **cf.optimizer_kwargs)
 
     # restore checkpoints
     if args.restore is not None:
-        cp_path = os.path.join(args.restore, 'model.pkl')
-        assert os.path.exists(cp_path)
-        checkpoint = torch.load(cp_path)
+        checkpoint = torch.load(args.restore)
 
         model.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state'])
@@ -78,10 +85,17 @@ def train(args):
         for i, batch in enumerate(train):
             loss = model.train_step(batch)
             step += 1
-            print(step, i, loss)
+            print(step, loss)
             # logits = self.forward(batch)
             preds = model.greedy_decode(batch)
 
+            # eval on dev set
+
+            # eval on test set
+
+            # save logs
+
+            # save model
 
             if step >= cf.max_step:
                 # stop training
@@ -89,3 +103,10 @@ def train(args):
                 break
         if stop_train:
             break
+
+    print('Stop training')
+
+
+
+
+

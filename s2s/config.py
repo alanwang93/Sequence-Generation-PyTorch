@@ -4,18 +4,28 @@
 from s2s.datasets import *
 
 class Config:
-    def __init__(self, data_path, model_path):
-        self.data_path = data_path
+    def __init__(self, data_root, model_path):
+        self.data_root = data_root
+        self.model_path = model_path
         self.batch_size = 64
         self.max_step = 20000
+
+        self.optimizer = 'Adam'
+        self.optimizer_kwargs = dict(
+                lr=0.001, 
+                betas=(0.9, 0.999), 
+                eps=1e-08, 
+                weight_decay=0)
+
+        self.init_metric = float('inf')
 
 
 class Test(Config):
 
-    def __init__(self, data_path, model_path):
-        super().__init__(data_path, model_path)
-        self.dataset = TestData(data_path)
-
+    def __init__(self, data_root, model_path):
+        super().__init__(data_root, model_path)
+        self.model = 'Seq2seq'
+        self.dataset = TestData(data_root)
         self.hidden_size = 100
         self.num_layers = 1
         self.embed_size = 200
@@ -29,6 +39,6 @@ class Test(Config):
 
 class Seq2seq_Gigaword(Config):
     
-    def __init__(self, data_path, model_path):
-        super().__init__(data_path, model_path)
-        self.dataset = Gigaword(data_path)
+    def __init__(self, data_root, model_path):
+        super().__init__(data_root, model_path)
+        self.dataset = Gigaword(data_root)
