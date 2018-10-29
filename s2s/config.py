@@ -16,8 +16,21 @@ class Config:
                 betas=(0.9, 0.999), 
                 eps=1e-08, 
                 weight_decay=0)
+    
 
+
+        # log
+        self.log_freq = 10
+        self.eval_freq = 100
+
+        # validation
+        self.eval_metric = 'loss'
         self.init_metric = float('inf')
+        
+    def is_better(cur, best):
+        if cur < best:
+            return True
+        return False
 
 
 class Test(Config):

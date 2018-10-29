@@ -70,7 +70,7 @@ class Seq2seq(nn.Module):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-        return loss.item()
+        return loss.item(), batch_size
 
     def get_loss(self, batch):
         logits = self.forward(batch)

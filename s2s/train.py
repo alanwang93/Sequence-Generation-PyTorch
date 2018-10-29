@@ -5,20 +5,27 @@ import argparse
 import pickle
 import os
 import itertools
+import pprint
 
 import torch
+import numpy as np
 
 import s2s.config as config
 import s2s.models as models
 from s2s.utils.dataloader import build_dataloaders
 from s2s.utils.vocab import Vocab
-from s2s.utils.utils import update_config
+from s2s.utils.utils import update_config, init_logging, to
 
 def train(args):
 
     model_path = os.path.join(args.model_root, args.config, args.suffix)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
+
+    logger = init_logging(os.path.join(model_path, 'train_log.txt'))
+    logger.info('Start train.py\n' + '=' * 80)
+    logger.info('Args:\n{0}'.format(pprint.pformat(vars(args), 2)))
+
 
     config_path = os.path.join(model_path, 'config.pkl')
     if args.restore is not None:
@@ -33,8 +40,14 @@ def train(args):
         update_config(config=cf, params=args.params)
     # save config
     pickle.dump(cf, open(config_path, 'wb'))
-
+    logger.info('Config name: {0}\n{1}'.format(args.config, pprint.pformat(vars(cf), 2)))
     dc = cf.dataset
+    logger.info('Data config: \n{0}'.format(pprint.pformat(vars(dc), 2)))
+
+    if args.cuda is None:
+        device = torch.device('cpu')
+    else:
+        device = torch.device('cuda', args.cuda)
     
     # TODO: BPE
     src_vocab = Vocab(model_path, dc.max_vocab_src, dc.min_freq, prefix='src')
@@ -60,6 +73,7 @@ def train(args):
 
     # model
     model = getattr(models, cf.model)(cf, src_vocab, tgt_vocab)
+    model = model.to(device)
     optimizer = getattr(torch.optim , cf.optimizer)(model.parameters(), **cf.optimizer_kwargs)
 
     # restore checkpoints
@@ -80,26 +94,45 @@ def train(args):
 
     
     stop_train = False
-
+    train_loss = 0
+    n_train_batch = 0
     for epoch in itertools.count():
-        for i, batch in enumerate(train):
-            loss = model.train_step(batch)
+        for i, train_batch in enumerate(train):
+            # train
+            train_batch = to(train_batch, device) 
+            train_loss_, n_train_batch_ = model.train_step(train_batch)
+            train_loss += train_loss_*n_train_batch_
+            n_train_batch += n_train_batch_
             step += 1
-            print('step', step)
-            print('train loss', loss)
+
+            if step % cf.log_freq == 0:
+                logger.info('[Train] Step {0}, Loss: {1:.5f}'.format(step, train_loss/n_train_batch))
+                train_loss = 0
+                n_train_batch = 0
+
             # logits = self.forward(batch)
             # preds = model.greedy_decode(batch)
 
             # eval on dev set
             # dev_loss_all = 0
-            for dev_batch in dev:
-                dev_loss, dev_batch_siize = model.get_loss(dev, batch)
+            if step % cf.eval_freq == 0:
+                dev_loss = 0
+                n_dev_batch = 0
+                for dev_batch in dev:
+                    dev_batch = to(dev_batch, device)
+                    dev_loss_, n_dev_batch_ = model.get_loss(dev_batch)
+                    dev_loss += dev_loss_*n_dev_batch_
+                    n_dev_batch += n_dev_batch_
+                logger.info('[Dev] Step {0}, Loss: {1:.5f}'.format(step, dev_loss/n_dev_batch))
+                dev_loss = 0
+                n_dev_batch = 0
+
                 # dev_loss_all += dev_loss
                 # print('dev loss', dev_loss)
 
             # eval on test set
-            test_loss = model.get_loss(batch)
-            print('test loss', dev_loss)
+            #test_loss = model.get_loss(batch)
+            #print('test loss', dev_loss)
 
 
             # save logs
@@ -110,7 +143,6 @@ def train(args):
                 # stop training
                 stop_train = True
                 break
-            print()
         if stop_train:
             break
 

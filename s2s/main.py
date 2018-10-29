@@ -23,6 +23,8 @@ if __name__ == '__main__':
     parser.add_argument('--model_root', type=str, default='checkpoints')
     parser.add_argument('--params', type=str, default=None)
     
+    parser.add_argument('--cuda', type=int, default=None)
+    
     parser.add_argument('--vocab', dest='vocab', action='store_true')
     args = parser.parse_args()
     main(args)

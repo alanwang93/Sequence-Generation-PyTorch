@@ -2,6 +2,8 @@
 # coding=utf-8
 
 import os
+import logging
+import sys
 
 def update_config(config, params):
     """
@@ -35,5 +37,14 @@ def init_logging(log_name):
     logging.getLogger().setLevel(logging.INFO)
     return logging
 
-def save_checkpoint(obj, is_best):
+def to(obj, device):
+    if isinstance(obj, dict):
+        for k in obj.keys():
+            obj[k] = obj[k].to(device)
+    else:
+        obj = obj.to(device)
+    return obj
+
+
+def rouge(ref, sent):
     pass
