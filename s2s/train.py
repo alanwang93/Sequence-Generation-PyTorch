@@ -85,13 +85,22 @@ def train(args):
         for i, batch in enumerate(train):
             loss = model.train_step(batch)
             step += 1
-            print(step, loss)
+            print('step', step)
+            print('train loss', loss)
             # logits = self.forward(batch)
-            preds = model.greedy_decode(batch)
+            # preds = model.greedy_decode(batch)
 
             # eval on dev set
+            # dev_loss_all = 0
+            for dev_batch in dev:
+                dev_loss, dev_batch_siize = model.get_loss(dev, batch)
+                # dev_loss_all += dev_loss
+                # print('dev loss', dev_loss)
 
             # eval on test set
+            test_loss = model.get_loss(batch)
+            print('test loss', dev_loss)
+
 
             # save logs
 
@@ -101,6 +110,7 @@ def train(args):
                 # stop training
                 stop_train = True
                 break
+            print()
         if stop_train:
             break
 

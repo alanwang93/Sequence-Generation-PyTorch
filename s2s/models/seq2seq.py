@@ -72,6 +72,12 @@ class Seq2seq(nn.Module):
         self.optimizer.step()
         return loss.item()
 
+    def get_loss(self, batch):
+        logits = self.forward(batch)
+        batch_size, seq_len, _ = logits.size()
+        loss = self.loss(input=logits.view(batch_size*seq_len, -1), target=batch['tgt_out'].view(-1))
+        return loss.item(), batch_size  
+
     def greedy_decode(self, batch):
         src, len_src = batch['src'], batch['len_src']
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
