@@ -37,6 +37,11 @@ class Summary:
             with open(self.file, 'w') as f:
                 f.write(self.join([self.xlabel] + self.columns))
             self.restart = False
+        else:
+            with open(self.file, 'r') as f:
+                self.columns = f.readline().strip().split(self.sep)
+                self.xlabel = self.columns[0]
+                self.columns = self.columns[1:]
         with open(self.file, 'a') as f:
             yvals = [ys[col] for col in self.columns]
             f.write(self.join([xval] + yvals))

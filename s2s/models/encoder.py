@@ -83,8 +83,8 @@ class RNNEncoder(Encoder):
                 hidden_size = self.hidden_size,
                 num_layers = self.num_layers,
                 batch_first=True,
-                dropout=dropout,
-                bidirectional=True)
+                dropout=self.dropout,
+                bidirectional=self.bidirectional)
 
     def forward(self, inputs, lengths, hidden=None, concat_output=True):
         """
@@ -104,6 +104,7 @@ class RNNEncoder(Encoder):
         if not concat_output:
             h_n = h_n.view(self.num_layers, self.num_directions, inputs.size(0), self.hidden_size)
             h_n = torch.mean(h_n, 1)
+            outputs = torch.mean(outputs.view(outputs.size(0), outputs.size(1), self.num_directions, self.hidden_size), 2)
         # print(h_n.size())
         # print(outputs.size*)
         # masks = (lengths-1).view(-1, 1, 1).expand(batch_size, 1, output.size(2))

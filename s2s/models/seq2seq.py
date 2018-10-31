@@ -13,7 +13,7 @@ import torch.nn.functional as F
 
 # from s2s.models.common import BaseModel
 from s2s.models.encoder import RNNEncoder
-from s2s.models.decoder import RNNDecoder
+from s2s.models.decoder import RNNDecoder, AttnRNNDecoder
 
 class Seq2seq(nn.Module):
     def __init__(self, config, src_vocab, tgt_vocab):
@@ -38,7 +38,7 @@ class Seq2seq(nn.Module):
                 cf.pretrained_size,
                 cf.projection)
 
-        self.decoder = RNNDecoder(
+        self.decoder = AttnRNNDecoder(
                 cf.hidden_size,
                 cf.num_layers,
                 cf.embed_size,
@@ -60,7 +60,7 @@ class Seq2seq(nn.Module):
         src, len_src = batch['src'], batch['len_src']
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
         src_last, src_output = self.encoder(src, len_src)
-        logits = self.decoder(tgt_in, len_tgt, src_last)
+        logits = self.decoder(tgt_in, len_tgt, src_last, src_output, len_src)
         return logits
 
     def train_step(self, batch):

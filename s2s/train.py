@@ -14,7 +14,7 @@ import s2s.config as config
 import s2s.models as models
 from s2s.utils.dataloader import build_dataloaders
 from s2s.utils.vocab import Vocab
-from s2s.utils.utils import update_config, init_logging, to
+from s2s.utils.utils import update_config, init_logging, to, compute_metrics
 from s2s.utils.summary import Summary
 
 def train(args):
@@ -32,7 +32,7 @@ def train(args):
     if args.restore is not None:
         assert os.path.exists(config_path)
         # restore config
-        cf = pickle.load(config_path)
+        cf = pickle.load(open(config_path, 'rb'))
     else:
         cf = getattr(config, args.config)(args.data_root, model_path)
 
@@ -109,6 +109,7 @@ def train(args):
         for i, train_batch in enumerate(train):
 
             # train
+            model.train()
             train_batch = to(train_batch, device) 
             train_loss_, n_train_batch_ = model.train_step(train_batch)
             train_loss += train_loss_*n_train_batch_
@@ -134,19 +135,36 @@ def train(args):
             if step % cf.eval_freq == 0:
                 dev_loss = 0
                 n_dev_batch = 0
-
+                model.eval()
+                dev_hyps, dev_refs = [], []
                 for dev_batch in dev:
                     dev_batch = to(dev_batch, device)
                     dev_loss_, n_dev_batch_ = model.get_loss(dev_batch)
                     dev_loss += dev_loss_*n_dev_batch_
                     n_dev_batch += n_dev_batch_
+                    preds = model.greedy_decode(dev_batch)
+                    for ref, hyp in zip(dev_batch['tgt_in'], preds):
+                        dev_refs.append(' '.join(tgt_vocab.tos(ref)))
+                        dev_hyps.append(' '.join(tgt_vocab.tos(hyp)))
                 dev_loss /= n_dev_batch
                 
                 # dev summary
                 dev_metrics = {'loss':dev_loss}
+                names = ['rouge']
+                dev_metrics.update(compute_metrics(dev_hyps, dev_refs, names))
                 dev_summ.write(step, dev_metrics)
 
                 logger.info('[Dev] Step {0}, Loss: {1:.5f}'.format(step, dev_loss))
+                for k, v in dev_metrics.items():
+                    logger.info('[Dev]\t{0}: {1:.5f}'.format(k, v))
+
+                logger.info('[Dev] Sample:\nref: {0}\nhyp: {1}\n'.format(dev_refs[0], dev_hyps[0]))
+
+                preds = model.greedy_decode(train_batch)
+
+                train_ref = ' '.join(tgt_vocab.tos(train_batch['tgt_in'][0]))
+                train_hyp = ' '.join(tgt_vocab.tos(preds[0]))
+                logger.info('[Train] Sample:\nref: {0}\nhyp: {1}\n'.format(train_ref, train_hyp))
 
                 dev_loss = 0
                 n_dev_batch = 0
@@ -165,6 +183,13 @@ def train(args):
 
             if step % n_train == 0:
                 # save model for this epoch
+                checkpoint = dict(
+                        state_dict=model.state_dict(),
+                        optimizer_state=optimizer.state_dict(),
+                        step=step,
+                        best_valid_metric=best_valid_metric,
+                        best_test_metric=best_test_metric,
+                        best_step=best_step)
                 cp_path = os.path.join(model_path, 'epoch_{0}.pkl'.format(epoch))
                 torch.save(checkpoint, cp_path)
                 logger.info('[Save] Model saved to {0}'.format(cp_path))

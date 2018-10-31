@@ -5,6 +5,8 @@ import os
 import logging
 import sys
 
+from rouge import Rouge
+
 def update_config(config, params):
     """
     params: string of form `param1 value1 param2 value2 ...`
@@ -46,5 +48,18 @@ def to(obj, device):
     return obj
 
 
-def rouge(ref, sent):
-    pass
+def rouge_score(hyps, refs, mode='f'):
+    metrics = dict()
+    rouge = Rouge()
+    scores = rouge.get_scores(hyps, refs, avg=True)
+    metrics['ROUGE-1'] = scores['rouge-1'][mode]
+    metrics['ROUGE-2'] = scores['rouge-2'][mode]
+    metrics['ROUGE-L'] = scores['rouge-l'][mode]
+    return metrics
+
+
+def compute_metrics(hyps, refs, names, avg=True):
+    metrics = dict()
+    if 'rouge' in names:
+        metrics.update(rouge_score(hyps, refs))
+    return metrics

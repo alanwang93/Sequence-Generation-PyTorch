@@ -181,12 +181,18 @@ class Vocab:
             setattr(self, k, d[k])
 
 
-    def toi(self, seq):
-        return [self.stoi[word] for word in seq]
+    def toi(self, seq, ignore_specials=True):
+        specials = [self.unk_token, self.pad_token, \
+                self.sos_token, self.eos_token]
+        return [self.stoi[word] for word in seq \
+                if not (ignore_specials and word in specials)]
 
 
-    def tos(self, seq):
-        return [self.itos[idx] for idx in seq]
+    def tos(self, seq, ignore_specials=True):
+        specials = [self.unk_idx, self.pad_idx, \
+                self.sos_idx, self.eos_idx]
+        return [self.itos[idx] for idx in seq \
+                if not (ignore_specials and idx in specials)]
 
     
     def to_full_idx(self, ):
