@@ -34,7 +34,7 @@ def train(args):
         # restore config
         cf = pickle.load(open(config_path, 'rb'))
     else:
-        cf = getattr(config, args.config)(args.data_root, model_path)
+        cf = getattr(config, args.config)(args.raw_root, args.data_root, model_path)
 
     if args.params is not None:
         # update config
@@ -50,28 +50,29 @@ def train(args):
     else:
         device = torch.device('cuda', args.cuda)
     
-    # TODO: BPE
-    src_vocab = Vocab(model_path, dc.max_vocab_src, dc.min_freq, prefix='src')
-    tgt_vocab = Vocab(model_path, dc.max_vocab_tgt, dc.min_freq, prefix='tgt')
-    if args.vocab:
-        rebuild = True
-        src_file = '{0}.{1}'.format(dc.train_prefix, dc.src)
-        tgt_file = '{0}.{1}'.format(dc.train_prefix, dc.tgt)
+    # TODO: BPE or WordPiece
+    src_vocab = Vocab(dc.path, dc.max_vocab_src, dc.min_freq, prefix='src')
+    tgt_vocab = Vocab(dc.path, dc.max_vocab_tgt, dc.min_freq, prefix='tgt')
+
+    if args.rebuild:
+        train_prefix = os.path.join(dc.raw, dc.train_prefix)
+        src_file = '{0}.{1}'.format(train_prefix, dc.src)
+        tgt_file = '{0}.{1}'.format(train_prefix, dc.tgt)
         corpus = dc.build_corpus(src_file)
         corpus.extend(dc.build_corpus(tgt_file))
     else:
-        rebuild = False
         corpus = None
     
-    src_vocab.build(rebuild, corpus)
-    tgt_vocab.build(rebuild, corpus)
+    src_vocab.build(args.rebuild, corpus)
+    tgt_vocab.build(args.rebuild, corpus)
     # cf.src_vocab = src_vocab
     # cf.tgt_vocab = tgt_vocab
     cf.src_vocab_size = len(src_vocab)
     cf.tgt_vocab_size = len(tgt_vocab)
 
-    train, dev, test = build_dataloaders(cf, src_vocab, tgt_vocab)
+    train, dev, test = build_dataloaders(cf, src_vocab, tgt_vocab, args.rebuild)
     n_train, n_dev, n_test = map(len, [train, dev, test])
+    logger.info('Dataset sizes: train {0}, dev {1}, test {2}'.format(n_train, n_dev, n_test))
 
     # model
     model = getattr(models, cf.model)(cf, src_vocab, tgt_vocab)
@@ -85,13 +86,13 @@ def train(args):
         model.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state'])
         step = checkpoint['step']
-        best_valid_metric = checkpoint['best_valid_metric']
+        best_dev_metric = checkpoint['best_dev_metric']
         best_test_metric = checkpoint['best_test_metric']
         best_step = checkpoint['best_step']
         restart = False
     else:
         step = 0
-        best_valid_metric = cf.init_metric
+        best_dev_metric = cf.init_metric
         best_test_metric = cf.init_metric
         best_step = 0
         restart = True
@@ -100,6 +101,7 @@ def train(args):
     train_summ = Summary(model_path, prefix='train', restart=restart)
     dev_summ = Summary(model_path, prefix='dev', restart=restart)
     test_summ = Summary(model_path, prefix='test', restart=restart)
+    best_summ = Summary(model_path, prefix='best', restart=restart)
     
     stop_train = False
     train_loss = 0
@@ -117,12 +119,14 @@ def train(args):
             step += 1
             epoch = step//n_train
 
+            #print(src_vocab.tos([train_batch['src_in'][0][train_batch['len_src'][0]-1]]))
+
             if step % cf.log_freq == 0:
+
+                train_loss /= n_train_batch
                 # train summary
                 train_metrics = {'loss':train_loss}
                 train_summ.write(step, train_metrics)
-
-                train_loss /= n_train_batch
                 logger.info('[Train] Step {0}, Loss: {1:.5f}'.format(step, train_loss))
 
                 train_loss = 0
@@ -144,8 +148,12 @@ def train(args):
                     n_dev_batch += n_dev_batch_
                     preds = model.greedy_decode(dev_batch)
                     for ref, hyp in zip(dev_batch['tgt_in'], preds):
-                        dev_refs.append(' '.join(tgt_vocab.tos(ref)))
-                        dev_hyps.append(' '.join(tgt_vocab.tos(hyp)))
+                        ref = ' '.join(tgt_vocab.tos(ref))
+                        hyp = ' '.join(tgt_vocab.tos(hyp))
+                        if hyp == '':
+                            hyp = ' '
+                        dev_refs.append(ref)
+                        dev_hyps.append(hyp)
                 dev_loss /= n_dev_batch
                 
                 # dev summary
@@ -153,6 +161,16 @@ def train(args):
                 names = ['rouge']
                 dev_metrics.update(compute_metrics(dev_hyps, dev_refs, names))
                 dev_summ.write(step, dev_metrics)
+
+                if cf.is_better(dev_metrics[cf.metric], best_dev_metric):
+                    best_step = step
+                    best_dev_metric = dev_metrics[cf.metric]
+                    #best_test_metric = test_metrics[dc.metric]
+                    best_summ.write(best_step, {
+                        'dev_' + cf.metric: best_dev_metric,
+                        'test_' + cf.metric: best_test_metric
+                        })
+
 
                 logger.info('[Dev] Step {0}, Loss: {1:.5f}'.format(step, dev_loss))
                 for k, v in dev_metrics.items():
@@ -173,7 +191,7 @@ def train(args):
                         state_dict=model.state_dict(),
                         optimizer_state=optimizer.state_dict(),
                         step=step,
-                        best_valid_metric=best_valid_metric,
+                        best_dev_metric=best_dev_metric,
                         best_test_metric=best_test_metric,
                         best_step=best_step)
                 
@@ -187,7 +205,7 @@ def train(args):
                         state_dict=model.state_dict(),
                         optimizer_state=optimizer.state_dict(),
                         step=step,
-                        best_valid_metric=best_valid_metric,
+                        best_dev_metric=best_dev_metric,
                         best_test_metric=best_test_metric,
                         best_step=best_step)
                 cp_path = os.path.join(model_path, 'epoch_{0}.pkl'.format(epoch))

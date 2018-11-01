@@ -55,7 +55,7 @@ class Decoder(nn.Module):
         preds = []
         inp = sos_idx * torch.ones((batch_size, 1), dtype=torch.long).to(hidden.device)
         while True:
-            logit, output, hidden = self.step(inp, hidden)
+            logit, output, hidden = self.step(inp, hidden, context, context_lengths)
             logp = F.log_softmax(logit, dim=2)
             maxv, maxidx = torch.max(logp, dim=2)
             if ((maxidx == eos_idx).all() and len(preds) > 0)  or len(preds) >= max_length:
@@ -210,8 +210,21 @@ class AttnRNNDecoder(Decoder):
         # output: (batch, 1, hidden_size)
         output, h_n = self.rnn(inputs, hidden)
         # (batch, 1, vocab_size)
-        logit = self.linear_out(output.squeeze(1))
-        return logit.unsqueeze(1), output, h_n
+
+        mask = sequence_mask(context_lengths, context.size(1)).unsqueeze(1)
+
+        # batch_size, len, dim
+        if self.attn_type == 'symmetric':
+            output_ = F.relu(self.D(output))
+            context_ = F.relu(self.D(context))
+            scores = torch.matmul(output_, context_.transpose(1,2)) # batch_size, tgt_len, src_len
+            scores = scores.masked_fill(mask == 0, -1e9)
+            p_attn = F.softmax(scores, -1)
+            weighted = torch.matmul(p_attn, context)
+            new_output = F.tanh(self.attn_out(torch.cat([output, weighted], -1)))
+
+        logit = self.linear_out(new_output.squeeze(1))
+        return logit.unsqueeze(1), new_output, h_n
 
     def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
         """

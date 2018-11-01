@@ -19,7 +19,7 @@ def update_config(config, params):
         value = params[2*i+1]
 
         if hasattr(config, param):
-            setattr(config, param, value)
+            setattr(config, param, type(getattr(config, param))(value))
         else:
             raise AttributeError()
 

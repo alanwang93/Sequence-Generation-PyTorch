@@ -1,5 +1,6 @@
 # project
 data/
+raw/
 # s2s/test/
 checkpoints/
 !data/*.py
