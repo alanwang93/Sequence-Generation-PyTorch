@@ -3,10 +3,13 @@
 
 import argparse
 from s2s.train import train
+from s2s.train_biclf import train as train_biclf
 
 def main(args):
     if args.mode == 'train':
         train(args)
+    elif args.mode == 'train_biclf':
+        train_biclf(args)
     elif args.mode == 'test':
         pass
     else:

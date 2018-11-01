@@ -3,7 +3,7 @@
 
 import os
 
-__all__ = ['Gigawords', 'TestData', 'TestData2']
+__all__ = ['Gigawords', 'TestData', 'TestData2', 'BiClfTestData']
 
 class DataConfig:
     
@@ -154,7 +154,31 @@ class TestData2(DataConfig):
         self.unk_token = 'unk'
   
 
+class BiClfTestData(DataConfig):
+    def __init__(self, raw_root, data_root):
+        super().__init__(raw_root, data_root)
 
+        self.raw = os.path.join(self.raw_root, 'test')
+        self.path = os.path.join(self.data_root, 'biclf_test')
+  
+        self.train_prefix = 'train'
+        self.dev_prefix = 'dev'
+        self.test_prefix = 'test'
+
+        # self.src_out = True
+
+        # sentence
+        self.max_src_len = 100
+        self.max_tgt_len = 20
+        
+        # Vocabulary
+        self.share_vocab = False
+        self.max_src_vocab = 200000
+        self.max_tgt_vocab = 100000
+        self.min_freq = 1
+        self.lower = True    
+
+        self.unk_token = 'unk'
 
 
 
