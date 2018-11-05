@@ -186,6 +186,19 @@ class BiClfSeq2seq(nn.Module):
                 cf.pretrained_size,
                 cf.projection)
 
+        self.clf_encoder = RNNEncoder(
+                cf.hidden_size,
+                cf.num_layers,
+                cf.embed_size,
+                src_vocab,
+                cf.bidirectional,
+                cf.rnn_dropout,
+                cf.pretrained,
+                cf.pretrained_size,
+                cf.projection)
+        
+        self.clf_encoder.embedding = self.encoder.embedding
+
         self.decoder = AttnRNNDecoder(
                 cf.hidden_size,
                 cf.num_layers,
@@ -199,7 +212,8 @@ class BiClfSeq2seq(nn.Module):
 
         self.num_directions = 2 if cf.bidirectional else 1
         self.encoder_linear = nn.Linear(cf.hidden_size, 3)
-        params = list(self.encoder.parameters()) +  list(self.decoder.parameters())
+        params = list(self.encoder.parameters()) +  list(self.decoder.parameters())\
+                +list(self.clf_encoder.parameters())
         self.optimizer = getattr(torch.optim, cf.optimizer)(params, **cf.optimizer_kwargs)
         
         self.loss = nn.CrossEntropyLoss(reduction='elementwise_mean', ignore_index=dc.pad_idx)
@@ -209,7 +223,8 @@ class BiClfSeq2seq(nn.Module):
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
         src_last, src_output = self.encoder(src, len_src)
         logits = self.decoder(tgt_in, len_tgt, src_last, src_output, len_src)
-        encoder_logits = self.encoder_linear(src_output)
+        clf_last, clf_output = self.clf_encoder(src, len_src)
+        encoder_logits = self.encoder_linear(clf_output)
         return logits, encoder_logits
 
     def train_step(self, batch):
@@ -217,19 +232,24 @@ class BiClfSeq2seq(nn.Module):
         batch_size, seq_len, _ = logits.size()
         en_seq_len = encoder_logits.size(1)
         loss = self.loss(input=logits.view(batch_size*seq_len, -1), target=batch['tgt_out'].view(-1))
-        lm_loss = self.loss(input=encoder_logits.view(batch_size*en_seq_len, -1),\
+        clf_loss = self.loss(input=encoder_logits.view(batch_size*en_seq_len, -1),\
                 target=batch['src_out'][:,:en_seq_len].contiguous().view(-1))
         self.optimizer.zero_grad()
-        total_loss = loss + self.config.clf_coef * lm_loss
+        total_loss = loss + self.config.clf_coef *clf_loss
         total_loss.backward()
         self.optimizer.step()
-        return loss.item(), batch_size
+        return loss.item(), self.config.clf_coef*clf_loss.item(), batch_size
 
     def get_loss(self, batch):
-        logits, _ = self.forward(batch)
+        #logits, _ = self.forward(batch)
+        logits, encoder_logits = self.forward(batch)
+        en_seq_len = encoder_logits.size(1)
         batch_size, seq_len, _ = logits.size()
         loss = self.loss(input=logits.view(batch_size*seq_len, -1), target=batch['tgt_out'].view(-1))
-        return loss.item(), batch_size  
+        clf_loss = self.loss(input=encoder_logits.view(batch_size*en_seq_len, -1),\
+                target=batch['src_out'][:,:en_seq_len].contiguous().view(-1))
+
+        return loss.item(), self.config.clf_coef*clf_loss.item(), batch_size  
 
     def greedy_decode(self, batch):
         src, len_src = batch['src_in'], batch['len_src']

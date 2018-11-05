@@ -7,8 +7,8 @@ class Config:
     def __init__(self, raw_root, data_root, model_path):
         self.data_root = data_root
         self.model_path = model_path
-        self.batch_size = 64
-        self.max_step = 20000
+        self.batch_size = 32
+        self.max_step = 30000
 
         self.optimizer = 'Adam'
         self.optimizer_kwargs = dict(
@@ -55,17 +55,17 @@ class BiClf(Config):
         super().__init__(raw_root, data_root, model_path)
         self.model = 'BiClfSeq2seq'
         self.dataset = BiClfTestData(raw_root, data_root)
-        self.hidden_size = 100
-        self.num_layers = 1
-        self.embed_size = 200
+        self.hidden_size = 200
+        self.num_layers = 2
+        self.embed_size = 300
         self.bidirectional = True
-        self.dropout = 0.2
-        self.rnn_dropout = 0
+        self.dropout = 0.3
+        self.rnn_dropout = 0.2
         # embedding
         self.pretrained = None
         self.pretrained_size = None
         self.projection = False
-        self.clf_coef = 0.0
+        self.clf_coef = 1.
 
 
 class Test(Config):

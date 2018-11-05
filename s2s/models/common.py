@@ -81,10 +81,10 @@ class Embedding(nn.Module):
         if projection:
             self.embeddings.weight.requires_grad = False
             self.projection_layer = Feedforward(d_in=pretrained_size, d_out=embed_size)
-        # self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(0.2)
 
     def forward(self, x, lengths=None):
-        embeddings = self.embeddings(x)
+        embeddings = self.dropout(self.embeddings(x))
         if self.projection: 
             return self.projection_layer(embeddings)
         else:

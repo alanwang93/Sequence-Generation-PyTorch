@@ -105,6 +105,7 @@ def train(args):
     
     stop_train = False
     train_loss = 0
+    train_clf_loss = 0
     n_train_batch = 0
 
     for _ in itertools.count():
@@ -113,8 +114,9 @@ def train(args):
             # train
             model.train()
             train_batch = to(train_batch, device) 
-            train_loss_, n_train_batch_ = model.train_step(train_batch)
+            train_loss_, train_clf_loss_, n_train_batch_ = model.train_step(train_batch)
             train_loss += train_loss_*n_train_batch_
+            train_clf_loss += train_clf_loss_*n_train_batch_
             n_train_batch += n_train_batch_
             step += 1
             epoch = step//n_train
@@ -124,12 +126,15 @@ def train(args):
             if step % cf.log_freq == 0:
 
                 train_loss /= n_train_batch
+                train_clf_loss /= n_train_batch
                 # train summary
                 train_metrics = {'loss':train_loss}
                 train_summ.write(step, train_metrics)
-                logger.info('[Train] Step {0}, Loss: {1:.5f}'.format(step, train_loss))
+                logger.info('[Train] Step {0}, Loss: {1:.5f}, Clf loss: {2:.5f}'\
+                        .format(step, train_loss, train_clf_loss))
 
                 train_loss = 0
+                train_clf_loss = 0
                 n_train_batch = 0
 
             # logits = self.forward(batch)
@@ -138,13 +143,15 @@ def train(args):
             # eval on dev set
             if step % cf.eval_freq == 0:
                 dev_loss = 0
+                dev_clf_loss = 0
                 n_dev_batch = 0
                 model.eval()
                 dev_hyps, dev_refs = [], []
                 for dev_batch in dev:
                     dev_batch = to(dev_batch, device)
-                    dev_loss_, n_dev_batch_ = model.get_loss(dev_batch)
+                    dev_loss_, dev_clf_loss_, n_dev_batch_ = model.get_loss(dev_batch)
                     dev_loss += dev_loss_*n_dev_batch_
+                    dev_clf_loss += dev_clf_loss_*n_dev_batch_
                     n_dev_batch += n_dev_batch_
                     preds = model.greedy_decode(dev_batch)
                     for ref, hyp in zip(dev_batch['tgt_in'], preds):
@@ -155,6 +162,7 @@ def train(args):
                         dev_refs.append(ref)
                         dev_hyps.append(hyp)
                 dev_loss /= n_dev_batch
+                dev_clf_loss /= n_dev_batch
                 
                 # dev summary
                 dev_metrics = {'loss':dev_loss}
@@ -172,7 +180,8 @@ def train(args):
                         })
 
 
-                logger.info('[Dev] Step {0}, Loss: {1:.5f}'.format(step, dev_loss))
+                logger.info('[Dev] Step {0}, Loss: {1:.5f}, Clf loss: {2:.5f}'\
+                        .format(step, dev_loss, dev_clf_loss))
                 for k, v in dev_metrics.items():
                     logger.info('[Dev]\t{0}: {1:.5f}'.format(k, v))
 
@@ -185,6 +194,7 @@ def train(args):
                 logger.info('[Train] Sample:\nref: {0}\nhyp: {1}\n'.format(train_ref, train_hyp))
 
                 dev_loss = 0
+                dev_clf_loss = 0
                 n_dev_batch = 0
 
                 checkpoint = dict(
