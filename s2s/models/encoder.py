@@ -15,9 +15,9 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
 from torch.nn.utils.rnn import pack_padded_sequence as pack
+import torch.nn.functional as F
 
-from s2s.models.common import Feedforward, Embedding
-
+from s2s.models.common import Feedforward, Embedding, sequence_mask
 
 
 """
