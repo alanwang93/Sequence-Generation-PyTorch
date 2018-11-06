@@ -5,10 +5,11 @@ from s2s.datasets import *
 
 class Config:
     def __init__(self, raw_root, data_root, model_path):
+        self.raw_root = raw_root
         self.data_root = data_root
         self.model_path = model_path
-        self.batch_size = 32
-        self.max_step = 30000
+        self.batch_size = 64
+        self.max_step = 100000
 
         self.optimizer = 'Adam'
         self.optimizer_kwargs = dict(
@@ -16,15 +17,21 @@ class Config:
                 betas=(0.9, 0.999), 
                 eps=1e-08, 
                 weight_decay=0)
+        self.clip_norm = 5.
 
         # log
-        self.log_freq = 10
-        self.eval_freq = 100
+        self.log_freq = 100
+        self.eval_freq = 2000
 
         # validation
         self.metric = 'loss'
         self.init_metric = float('inf')
-        
+
+        # pretrained embedding
+        # stored in raw_root/embeddings/...
+        self.pretrained = None #'glove.6B.300d.txt'
+
+
     def is_better(self, cur, best):
         if cur < best:
             return True
@@ -40,8 +47,9 @@ class EnLM(Config):
         self.num_layers = 1
         self.embed_size = 200
         self.bidirectional = True
-        self.dropout = 0.2
-        self.rnn_dropout = 0
+        self.embed_dropout = 0.2
+        self.rnn_dropout = 0.1
+        self.mlp_dropout = 0.3
         # embedding
         self.pretrained = None
         self.pretrained_size = None
@@ -49,23 +57,44 @@ class EnLM(Config):
         self.lm_coef = 0.5
 
 
+class Vanilla(Config):
+    def __init__(self, raw_root, data_root, model_path):
+        super().__init__(raw_root, data_root, model_path)
+        self.model = 'Seq2seq'
+        self.dataset = Gigaword(raw_root, data_root)
+        self.hidden_size = 512
+        self.num_layers = 1
+        self.embed_size = 300
+        self.bidirectional = True
+        self.embed_dropout = 0.3
+        self.rnn_dropout = 0.1
+        self.mlp_dropout = 0.3
+        # embedding
+        self.pretrained = 'glove.6B.300d.txt'
+        self.pretrained_size = 300
+        self.projection = None
+        #self.clf_coef = 3.
+        self.mlp1_size = 400
 
-class BiClf(Config):
+
+class BiClfInternal(Config):
     def __init__(self, raw_root, data_root, model_path):
         super().__init__(raw_root, data_root, model_path)
         self.model = 'BiClfSeq2seq'
-        self.dataset = BiClfTestData(raw_root, data_root)
+        self.dataset = BiClfInternalData(raw_root, data_root)
         self.hidden_size = 200
         self.num_layers = 2
         self.embed_size = 300
         self.bidirectional = True
-        self.dropout = 0.3
-        self.rnn_dropout = 0.2
+        self.embed_dropout = 0.2
+        self.rnn_dropout = 0.1
+        self.mlp_dropout = 0.3
         # embedding
-        self.pretrained = None
-        self.pretrained_size = None
-        self.projection = False
-        self.clf_coef = 1.
+        self.pretrained = 'glove.6B.300d.txt'
+        self.pretrained_size = 300
+        self.projection = None
+        self.clf_coef = 3.
+        self.mlp1_size = 400
 
 
 class Test(Config):
@@ -80,6 +109,7 @@ class Test(Config):
         self.bidirectional = True
         self.dropout = 0.2
         self.rnn_dropout = 0
+        self.mlp_dropout = 0.3
         # embedding
         self.pretrained = None
         self.pretrained_size = None
@@ -97,13 +127,68 @@ class Test2(Config):
         self.bidirectional = True
         self.dropout = 0.2
         self.rnn_dropout = 0
+        self.mlp_dropout = 0.3
         # embedding
         self.pretrained = None
         self.pretrained_size = None
         self.projection = False
 
-class Seq2seq_Gigaword(Config):
+class MTS2S_Gigaword(Config):
     
     def __init__(self, raw_root, data_root, model_path):
         super().__init__(raw_root, data_root, model_path)
+        self.model = 'BiClfSeq2seq'
+        self.dataset = BiClfGigaword(raw_root, data_root)
+        self.hidden_size = 512
+        self.num_layers = 1
+        self.embed_size = 300
+        self.bidirectional = True
+        self.embed_dropout = 0.2
+        self.rnn_dropout = 0.1
+        self.mlp_dropout = 0.2
+        # embedding
+        self.pretrained = 'glove.6B.300d.txt'
+        self.pretrained_size = 300
+        self.projection = None
+        self.clf_coef = 3.
+        self.mlp1_size = 400
+
+class MTS2SExt_Gigaword(Config):
+    
+    def __init__(self, raw_root, data_root, model_path):
+        super().__init__(raw_root, data_root, model_path)
+        self.model = 'BiClfSeq2seqExt'
+        self.dataset = BiClfGigaword(raw_root, data_root)
+        self.hidden_size = 512
+        self.num_layers = 2
+        self.embed_size = 300
+        self.bidirectional = True
+        self.embed_dropout = 0.2
+        self.rnn_dropout = 0.1
+        self.mlp_dropout = 0.2
+        # embedding
+        self.pretrained = 'glove.6B.300d.txt'
+        self.pretrained_size = 300
+        self.projection = None
+        self.clf_coef = 1.
+        self.mlp1_size = None
+
+class SelfFusion_Gigaword(Config):
+    def __init__(self, raw_root, data_root, model_path):
+        super().__init__(raw_root, data_root, model_path)
+        self.model = 'SelfFusionSeq2seq'
         self.dataset = Gigaword(raw_root, data_root)
+        self.hidden_size = 512
+        self.num_layers = 1
+        self.embed_size = 300
+        self.bidirectional = True
+        self.embed_dropout = 0.2
+        self.rnn_dropout = 0.1
+        self.mlp_dropout = 0.2
+        # embedding
+        self.pretrained = 'glove.6B.300d.txt'
+        self.pretrained_size = 300
+        self.projection = None
+        #self.clf_coef = 3.
+        self.mlp1_size = 400
+

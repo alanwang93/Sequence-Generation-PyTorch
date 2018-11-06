@@ -222,11 +222,11 @@ def build_dataloaders_biclf(
                 all_len_src, all_len_tgt = [], []
                 all_src, all_tgt = [], []
                 all_src_out = []
-                i = 0
+                k = 0
                 for src, tgt in zip(s, t):
-                    i += 1
-                    if i % 1000 == 0:
-                        print(i, flush=True)
+                    k += 1
+                    if k % 1000 == 0:
+                        print(k, flush=True)
 
                     str_src = src.strip().lower().split(' ')[:max_len_src]
                     len_src = len(str_src)

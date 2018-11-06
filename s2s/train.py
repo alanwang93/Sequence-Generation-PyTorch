@@ -54,7 +54,7 @@ def train(args):
     src_vocab = Vocab(dc.path, dc.max_vocab_src, dc.min_freq, prefix='src')
     tgt_vocab = Vocab(dc.path, dc.max_vocab_tgt, dc.min_freq, prefix='tgt')
 
-    if args.rebuild:
+    if args.vocab:
         train_prefix = os.path.join(dc.raw, dc.train_prefix)
         src_file = '{0}.{1}'.format(train_prefix, dc.src)
         tgt_file = '{0}.{1}'.format(train_prefix, dc.tgt)
@@ -63,10 +63,8 @@ def train(args):
     else:
         corpus = None
     
-    src_vocab.build(args.rebuild, corpus)
-    tgt_vocab.build(args.rebuild, corpus)
-    # cf.src_vocab = src_vocab
-    # cf.tgt_vocab = tgt_vocab
+    src_vocab.build(args.vocab, corpus)
+    tgt_vocab.build(args.vocab, corpus)
     cf.src_vocab_size = len(src_vocab)
     cf.tgt_vocab_size = len(tgt_vocab)
 
@@ -75,16 +73,16 @@ def train(args):
     logger.info('Dataset sizes: train {0}, dev {1}, test {2}'.format(n_train, n_dev, n_test))
 
     # model
-    model = getattr(models, cf.model)(cf, src_vocab, tgt_vocab)
+    model = getattr(models, cf.model)(cf, src_vocab, tgt_vocab, args.restore)
     model = model.to(device)
-    optimizer = getattr(torch.optim , cf.optimizer)(model.parameters(), **cf.optimizer_kwargs)
+    #optimizer = getattr(torch.optim , cf.optimizer)(model.parameters(), **cf.optimizer_kwargs)
 
     # restore checkpoints
     if args.restore is not None:
         checkpoint = torch.load(args.restore)
 
         model.load_state_dict(checkpoint['state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state'])
+        model.optimizer.load_state_dict(checkpoint['optimizer_state'])
         step = checkpoint['step']
         best_dev_metric = checkpoint['best_dev_metric']
         best_test_metric = checkpoint['best_test_metric']
@@ -106,7 +104,8 @@ def train(args):
     stop_train = False
     train_loss = 0
     n_train_batch = 0
-
+    best_metrics = dict()
+    
     for _ in itertools.count():
         for i, train_batch in enumerate(train):
 
@@ -162,34 +161,88 @@ def train(args):
                 dev_metrics.update(compute_metrics(dev_hyps, dev_refs, names))
                 dev_summ.write(step, dev_metrics)
 
-                if cf.is_better(dev_metrics[cf.metric], best_dev_metric):
-                    best_step = step
-                    best_dev_metric = dev_metrics[cf.metric]
-                    #best_test_metric = test_metrics[dc.metric]
-                    best_summ.write(best_step, {
-                        'dev_' + cf.metric: best_dev_metric,
-                        'test_' + cf.metric: best_test_metric
-                        })
-
-
                 logger.info('[Dev] Step {0}, Loss: {1:.5f}'.format(step, dev_loss))
                 for k, v in dev_metrics.items():
                     logger.info('[Dev]\t{0}: {1:.5f}'.format(k, v))
 
                 logger.info('[Dev] Sample:\nref: {0}\nhyp: {1}\n'.format(dev_refs[0], dev_hyps[0]))
 
-                preds = model.greedy_decode(train_batch)
 
-                train_ref = ' '.join(tgt_vocab.tos(train_batch['tgt_in'][0]))
-                train_hyp = ' '.join(tgt_vocab.tos(preds[0]))
-                logger.info('[Train] Sample:\nref: {0}\nhyp: {1}\n'.format(train_ref, train_hyp))
+                # eval on test set
+                test_loss = 0
+                n_test_batch = 0
+                model.eval()
+                test_hyps, test_refs = [], []
+                for test_batch in test:
+                    test_batch = to(test_batch, device)
+                    test_loss_, n_test_batch_ = model.get_loss(test_batch)
+                    test_loss += test_loss_*n_test_batch_
+                    n_test_batch += n_test_batch_
+                    preds = model.greedy_decode(test_batch)
+                    for ref, hyp in zip(test_batch['tgt_in'], preds):
+                        ref = ' '.join(tgt_vocab.tos(ref))
+                        hyp = ' '.join(tgt_vocab.tos(hyp))
+                        if hyp == '':
+                            hyp = ' '
+                        test_refs.append(ref)
+                        test_hyps.append(hyp)
+                test_loss /= n_test_batch
+                
+                # test summary
+                test_metrics = {'loss':test_loss}
+                names = ['rouge']
+                test_metrics.update(compute_metrics(test_hyps, test_refs, names))
+                test_summ.write(step, test_metrics)
+
+                logger.info('[Test] Step {0}, Loss: {1:.5f}'\
+                        .format(step, test_loss))
+                for k, v in test_metrics.items():
+                    logger.info('[Test]\t{0}: {1:.5f}'.format(k, v))
+
+                if cf.is_better(dev_metrics[cf.metric], best_dev_metric):
+                    best_step = step
+                    best_dev_metric = dev_metrics[cf.metric]
+                    best_test_metric = test_metrics[cf.metric]
+                    for name in dev_metrics:
+                        best_metrics['dev_' + name] = dev_metrics[name]
+                    best_summ.write(best_step, best_metrics)
+
+                if cf.is_better(dev_metrics[cf.metric], best_dev_metric):
+                    best_step = step
+                    best_dev_metric = dev_metrics[cf.metric]
+                    best_test_metric = test_metrics[cf.metric]
+                    for name in dev_metrics:
+                        best_metrics['dev_' + name] = dev_metrics[name]
+                    best_summ.write(best_step, best_metrics)
+
+                    checkpoint = dict(
+                            state_dict=model.state_dict(),
+                            optimizer_state=model.optimizer.state_dict(),
+                            step=step,
+                            best_dev_metric=best_dev_metric,
+                            best_test_metric=best_test_metric,
+                            best_step=best_step)
+                    
+                    cp_path = os.path.join(model_path, 'best.pkl')
+                    torch.save(checkpoint, cp_path)
+                    logger.info('[Save] Model saved to {0}'.format(cp_path))
+
+
+                best_metrics['dev_' + cf.metric] = best_dev_metric
+                best_metrics['test_' + cf.metric] = best_test_metric
+
+                # best up to now
+                best_str = '[Dev] Best up to now:\nstep:{0}\n'.format(best_step)
+                for k in best_metrics:
+                    best_str += '{0}:\t{1}\n'.format(k, best_metrics[k])
+                logger.info(best_str)
 
                 dev_loss = 0
                 n_dev_batch = 0
 
                 checkpoint = dict(
                         state_dict=model.state_dict(),
-                        optimizer_state=optimizer.state_dict(),
+                        optimizer_state=model.optimizer.state_dict(),
                         step=step,
                         best_dev_metric=best_dev_metric,
                         best_test_metric=best_test_metric,
