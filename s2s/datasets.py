@@ -3,7 +3,8 @@
 
 import os
 
-__all__ = ['Gigawords', 'TestData', 'TestData2', 'BiClfTestData']
+__all__ = ['Gigaword', 'BiClfGigaword', 'TestData', 'TestData2', 'BiClfTestData', 
+        'BiClfInternalData']
 
 class DataConfig:
     
@@ -29,6 +30,7 @@ class DataConfig:
         # sentence
         self.max_len_src = 100
         self.max_len_tgt = 20
+        self.src_out = False
         
         # Vocabulary
         self.share_vocab = False
@@ -75,7 +77,10 @@ class DataConfig:
         return corpus
 
 
-class Gigawords(DataConfig):
+class Gigaword(DataConfig):
+    """
+    use `train.py`
+    """
 
     def __init__(self, raw_root, data_root):
         super().__init__(raw_root, data_root)
@@ -86,19 +91,51 @@ class Gigawords(DataConfig):
 
         self.train_prefix = 'train'
         self.dev_prefix = 'dev'
-        self.test_prefix = 'test'
+        self.test_prefix = 'test.filtered'
         
         # sentence
-        self.max_src_len = 100
-        self.max_tgt_len = 20
+        self.max_src_len = 120
+        self.max_tgt_len = 50
+        self.src_out = False
         
         # Vocabulary
         self.share_vocab = False
         self.max_src_vocab = 200000
         self.max_tgt_vocab = 100000
-        self.min_freq = 3
+        self.min_freq = 0
         self.lower = True
 
+        self.unk_token = '<unk>'
+
+class BiClfGigaword(DataConfig):
+    """
+    use `train_biclf.py`
+    """
+
+    def __init__(self, raw_root, data_root):
+        super().__init__(raw_root, data_root)
+        
+        self.name = 'BiClfGigawords'
+        self.raw = os.path.join(self.raw_root, 'giga')
+        self.path = os.path.join(self.data_root, 'biclf_giga')
+
+        self.train_prefix = 'train'
+        self.dev_prefix = 'dev'
+        self.test_prefix = 'test.filtered'
+        
+        # sentence
+        self.max_src_len = 120
+        self.max_tgt_len = 50
+        self.src_out = True
+        
+        # Vocabulary
+        self.share_vocab = False
+        self.max_src_vocab = 200000
+        self.max_tgt_vocab = 100000
+        self.min_freq = 0
+        self.lower = True
+
+        self.unk_token = '<unk>'
 
 class TestData(DataConfig):
     def __init__(self, raw_root, data_root):
@@ -115,13 +152,13 @@ class TestData(DataConfig):
 
         # sentence
         self.max_src_len = 100
-        self.max_tgt_len = 20
+        self.max_tgt_len = 50
         
         # Vocabulary
         self.share_vocab = False
         self.max_src_vocab = 200000
         self.max_tgt_vocab = 100000
-        self.min_freq = 1
+        self.min_freq = 0
         self.lower = True    
 
         self.unk_token = 'unk'
@@ -163,9 +200,7 @@ class BiClfTestData(DataConfig):
   
         self.train_prefix = 'train'
         self.dev_prefix = 'dev'
-        self.test_prefix = 'test'
-
-        # self.src_out = True
+        self.test_prefix = 'test.filtered'
 
         # sentence
         self.max_src_len = 100
@@ -175,12 +210,37 @@ class BiClfTestData(DataConfig):
         self.share_vocab = False
         self.max_src_vocab = 200000
         self.max_tgt_vocab = 100000
-        self.min_freq = 1
+        self.min_freq = 0
         self.lower = True    
 
-        self.unk_token = 'unk'
+        self.unk_token = '<unk>'
 
 
+
+
+class BiClfInternalData(DataConfig):
+    def __init__(self, raw_root, data_root):
+        super().__init__(raw_root, data_root)
+
+        self.raw = os.path.join(self.raw_root, 'internal')
+        self.path = os.path.join(self.data_root, 'biclf_internal')
+  
+        self.train_prefix = 'train'
+        self.dev_prefix = 'dev'
+        self.test_prefix = 'test.filtered'
+
+        # sentence
+        self.max_src_len = 100
+        self.max_tgt_len = 20
+        
+        # Vocabulary
+        self.share_vocab = False
+        self.max_src_vocab = 200000
+        self.max_tgt_vocab = 100000
+        self.min_freq = 0
+        self.lower = True    
+
+        self.unk_token = '<unk>'
 
 
 

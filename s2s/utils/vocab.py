@@ -77,7 +77,6 @@ class Vocab:
             for word, freq in words_and_frequencies:
                 if not (freq < min_freq or len(self.itos) == max_vocab) and word not in self.itos:
                     self.itos.append(word)
- 
             self.stoi.update({tok: i for i, tok in enumerate(self.itos)})
             self._dump()
 
@@ -182,14 +181,14 @@ class Vocab:
 
 
     def toi(self, seq, ignore_specials=True):
-        specials = [self.unk_token, self.pad_token, \
+        specials = [self.pad_token, \
                 self.sos_token, self.eos_token]
         return [self.stoi[word] for word in seq \
                 if not (ignore_specials and word in specials)]
 
 
     def tos(self, seq, ignore_specials=True):
-        specials = [self.unk_idx, self.pad_idx, \
+        specials = [self.pad_idx, \
                 self.sos_idx, self.eos_idx]
         return [self.itos[idx] for idx in seq \
                 if not (ignore_specials and idx in specials)]

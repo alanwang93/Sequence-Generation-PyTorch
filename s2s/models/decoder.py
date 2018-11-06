@@ -81,33 +81,29 @@ class RNNDecoder(Decoder):
     def __init__(self,
             hidden_size,
             num_layers,
-            embed_size,
-            vocab,
+            #embed_size,
+            #vocab,
+            embed,
+            mlp1_size,
             dropout=0.0,
-            pretrained=None,
-            pretrained_size=None,
-            projection=False):
+            mlp_dropout=0.0):
+            #pretrained=None,
+            #pretrained_size=None,
+            #projection=False):
 
         super().__init__()
         
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.embed_size = embed_size
-        self.vocab = vocab
-        self.vocab_size = len(vocab)
-        self.pad_idx = vocab.pad_idx
+        self.embed = embed
+        self.vocab_size = embed.vocab_size
+        self.embed_size = embed.vocab_size
         self.dropout = dropout
-        self.pretrained = pretrained
-        self.pretrained_size = pretrained_size
-        self.projection = projection
 
-        self.embedding = Embedding(
-                self.embed_size,
-                self.vocab,
-                self.pretrained,
-                self.pretrained_size,
-                self.projection)
+        self.embedding = embed
+        self.mlp1_size = mlp1_size
 
+        self.cell = 'gru'
         # TODO
         self.rnn = nn.GRU(
                 input_size = self.embed_size,
@@ -117,9 +113,30 @@ class RNNDecoder(Decoder):
                 dropout=dropout)
 
         # TODO: flexible hidden_size
-        self.linear_out = nn.Linear(
+        self.mlp1 = nn.Linear(
                 self.hidden_size,
                 self.vocab_size)
+        self.mlp2 = nn.Linear(
+                self.hidden_size,
+                self.vocab_size)
+
+        self.init_weights()
+
+    def init_weights(self):
+        # RNN
+        for i in range(self.num_layers):
+            if self.cell == 'gru':
+                K = 3
+            elif self.cell == 'lstm':
+                K = 4
+            for k in range(K):
+                s = k*self.hidden_size
+                e = (k+1)*self.hidden_size
+                w = getattr(self.rnn, 'weight_ih_l{0}'.format(i))[s:e]
+                nn.init.orthogonal_(w)
+                w = getattr(self.rnn, 'weight_hh_l{0}'.format(i))[s:e]
+                nn.init.orthogonal_(w)
+
 
     def step(self, inputs, hidden=None, context=None, context_lengths=None):
         inputs = self.embedding(inputs)
@@ -157,32 +174,21 @@ class AttnRNNDecoder(Decoder):
     def __init__(self,
             hidden_size,
             num_layers,
-            embed_size,
-            vocab,
-            dropout=0.0,
-            pretrained=None,
-            pretrained_size=None,
-            projection=False):
+            embed,
+         #   mlp1_size,
+            dropout=0.,
+            mlp_dropout=0.):
 
         super().__init__()
         
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.embed_size = embed_size
-        self.vocab = vocab
-        self.vocab_size = len(vocab)
-        self.pad_idx = vocab.pad_idx
-        self.dropout = dropout
-        self.pretrained = pretrained
-        self.pretrained_size = pretrained_size
-        self.projection = projection
+        self.embed_size = embed.embed_size
+        self.vocab_size = embed.vocab_size
 
-        self.embedding = Embedding(
-                self.embed_size,
-                self.vocab,
-                self.pretrained,
-                self.pretrained_size,
-                self.projection)
+        self.embedding = embed
+        #self.mlp1_size = mlp1_size
+        self.cell = 'gru'
 
         # TODO
         self.rnn = nn.GRU(
@@ -193,9 +199,14 @@ class AttnRNNDecoder(Decoder):
                 dropout=dropout)
 
         # TODO: flexible hidden_size
-        self.linear_out = nn.Linear(
+        self.mlp1 = nn.Linear(
                 self.hidden_size,
                 self.vocab_size)
+        #self.mlp2 = nn.Linear(
+        #        self.mlp1_size,
+        #        self.vocab_size)
+
+        self.dropout = nn.Dropout(mlp_dropout)
 
         self.attn_type = 'symmetric'
         if self.attn_type == 'symmetric':
@@ -203,6 +214,28 @@ class AttnRNNDecoder(Decoder):
             self.D = nn.Linear(hidden_size, self.inter_dim, bias=False)
             self.U = nn.Linear(self.inter_dim, self.inter_dim, bias=False)
             self.attn_out = nn.Linear(hidden_size*2, hidden_size)
+        elif self.attn_type == 'add':
+            self.inter_dim = hidden_size
+            self.W = nn.Linear(2*hidden_size, self.inter_dim, bias=False) 
+            self.v = nn.Linear(self.inter_dim, 1, bias=False)
+            self.attn_out = nn.Linear(hidden_size*2, hidden_size)
+        self.init_weights()
+
+    def init_weights(self):
+        # RNN
+        for i in range(self.num_layers):
+            if self.cell == 'gru':
+                K = 3
+            elif self.cell == 'lstm':
+                K = 4
+            for k in range(K):
+                s = k*self.hidden_size
+                e = (k+1)*self.hidden_size
+                w = getattr(self.rnn, 'weight_ih_l{0}'.format(i))[s:e]
+                nn.init.orthogonal_(w)
+                w = getattr(self.rnn, 'weight_hh_l{0}'.format(i))[s:e]
+                nn.init.orthogonal_(w)
+
 
     def step(self, inputs, hidden=None, context=None, context_lengths=None):
         inputs = self.embedding(inputs)
@@ -222,8 +255,18 @@ class AttnRNNDecoder(Decoder):
             p_attn = F.softmax(scores, -1)
             weighted = torch.matmul(p_attn, context)
             new_output = F.tanh(self.attn_out(torch.cat([output, weighted], -1)))
+        elif self.attn_type == 'add':
+            scores = self.v(self.W(np.concatenate((context, output), -1)))
+            scores = scores.masked_fill(mask == 0, -1e9)
+            p_attn = F.softmax(scores, -1)
+            weighted = torch.matmul(p_attn, context)
+            new_output = F.tanh(self.attn_out(torch.cat([output, weighted], -1)))
 
-        logit = self.linear_out(new_output.squeeze(1))
+        new_output = self.dropout(new_output)
+        logit = self.mlp1(new_output.squeeze(1))
+        #logit = F.tanh(logit)
+        logit = self.dropout(logit)
+        #logit = self.mlp2(logit)
         return logit.unsqueeze(1), new_output, h_n
 
     def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
@@ -245,17 +288,17 @@ class AttnRNNDecoder(Decoder):
             p_attn = F.softmax(scores, -1)
             weighted = torch.matmul(p_attn, context)
             new_outputs = F.tanh(self.attn_out(torch.cat([outputs, weighted], -1)))
+        elif self.attn_type == 'add':
+            scores = self.v(self.W(torch.cat((context, outputs), -2)))
+            scores = scores.masked_fill(mask == 0, -1e9)
+            p_attn = F.softmax(scores, -1)
+            weighted = torch.matmul(p_attn, context)
+            new_outputs = F.tanh(self.attn_out(torch.cat([outputs, weighted], -1)))
 
-
-        #logits = self.linear_out(outputs)
-        #inputs = inputs.split(1, 1)
-        #logits = []
-        #outputs = []
-        #for inp in inputs:
-        #    logit, output, hidden = self.step(inp, hidden)
-        #    logits.append(logit)
-        #    outputs.append(output)
-        #outputs = torch.cat(outputs, 1)
-        logits = self.linear_out(new_outputs)
+        new_outputs = self.dropout(new_outputs)
+        logits = self.mlp1(new_outputs)
+        #logits = F.tanh(logits)
+        logits = self.dropout(logits)
+        #logits = self.mlp2(logits)
         return logits
 

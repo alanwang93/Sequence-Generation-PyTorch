@@ -54,7 +54,7 @@ def sequence_mask(lengths, max_len=None):
 class Embedding(nn.Module):
 
     def __init__(self, embed_size, vocab, pretrained=None, \
-            pretrained_size=None, projection=False):
+            pretrained_size=None, projection=False, embed_dropout=0.2):
         """
         1. use pretrained embedding
             1.1 with projection => embed_size 
@@ -62,7 +62,7 @@ class Embedding(nn.Module):
         2. no pretrained embedding
         """
         super().__init__()
-        self.embed_size = embed_size
+        self.embed_size =pretrained_size or embed_size
         self.vocab = vocab
         self.projection = projection
         self.vocab_size = len(vocab)
@@ -74,17 +74,20 @@ class Embedding(nn.Module):
             if not projection:
                 assert pretrained_size == embed_size
 
-        self.embeddings = nn.Embedding(self.vocab_size, pretrained_size or embed_size, \
+        self.out_size = pretrained_size or embed_size
+        self.embeddings = nn.Embedding(self.vocab_size, self.embed_size, \
                 padding_idx=vocab.pad_idx)
         self.load_embeddings()
 
         if projection:
             self.embeddings.weight.requires_grad = False
             self.projection_layer = Feedforward(d_in=pretrained_size, d_out=embed_size)
-        # self.dropout = nn.Dropout(0.2)
+            self.embed_size = embed_size
+        self.dropout = nn.Dropout(embed_dropout)
+
 
     def forward(self, x, lengths=None):
-        embeddings = self.embeddings(x)
+        embeddings = self.dropout(self.embeddings(x))
         if self.projection: 
             return self.projection_layer(embeddings)
         else:
@@ -95,15 +98,22 @@ class Embedding(nn.Module):
         weights[self.vocab.pad_idx] = 0.
         # Glove
         if self.pretrained is not None:
+            num_found = 0
             with open(self.pretrained, 'r') as f:
+                print('Loading pretrained embeddings from {0}'.format(self.pretrained))
                 for line in f:
                     s = line.strip().split(' ')
                     word = s[0]
-                    if word.lower() in vocab.stoi:
+                    if word.lower() in self.vocab.stoi:
+                        num_found += 1
                         vector = np.asarray([float(s[i]) for i in range(1, len(s))])
-                        idx = vocab.stoi[word]
-                        if idx != vocab.pad_idx:
+                        idx = self.vocab.stoi[word]
+                        if idx != self.vocab.pad_idx:
                             weights[idx] = vector
+            print('Found: {0}, Not found: {1}'.format(num_found, self.vocab_size-num_found))
+        self.embeddings.weight.data = torch.from_numpy(weights.astype(np.float32))
+
+
 
 
 
