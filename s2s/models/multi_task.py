@@ -1,10 +1,7 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-<<<<<<< HEAD
-=======
 
->>>>>>> 55fe0e629df9c0ffc3e14b6457a5bafd9353cfff
 import os
 import time
 
@@ -14,25 +11,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-<<<<<<< HEAD
-from s2s.models.encoder import RNNEncoder
-from s2s.models.decoder import RNNDecoder, AttnRNNDecoder
-
-
-class BiClfSeq2seq(nn.Module):
-    """
-    Two separate rnn encodes the src inputs, one as encoder, one predicting 
-    binary labels. They share the same embedding matrix
-    """
-    def __init__(self, config, src_vocab, tgt_vocab):
-=======
 from s2s.models.common import Embedding
 from s2s.models.encoder import RNNEncoder
 from s2s.models.decoder import RNNDecoder, AttnRNNDecoder
  
 class EnLMSeq2seq(nn.Module):
     def __init__(self, config, src_vocab, tgt_vocab, restore):
->>>>>>> 55fe0e629df9c0ffc3e14b6457a5bafd9353cfff
         super().__init__()
         cf = config
         dc = cf.dataset
@@ -43,18 +27,6 @@ class EnLMSeq2seq(nn.Module):
         self.src_vocab = src_vocab
         self.tgt_vocab = tgt_vocab
 
-<<<<<<< HEAD
-        self.encoder = RNNEncoder(
-                cf.hidden_size,
-                cf.num_layers,
-                cf.embed_size,
-                src_vocab,
-                cf.bidirectional,
-                cf.rnn_dropout,
-                cf.pretrained,
-                cf.pretrained_size,
-                cf.projection)
-=======
         if cf.pretrained is not None:
             pretrained = os.path.join(cf.raw_root, 'embeddings', cf.pretrained)
         else:
@@ -84,23 +56,10 @@ class EnLMSeq2seq(nn.Module):
                 encoder_embed,
                 cf.bidirectional,
                 cf.rnn_dropout,)
->>>>>>> 55fe0e629df9c0ffc3e14b6457a5bafd9353cfff
 
         self.decoder = AttnRNNDecoder(
                 cf.hidden_size,
                 cf.num_layers,
-<<<<<<< HEAD
-                cf.embed_size,
-                tgt_vocab,
-                # cf.bidirectional,
-                cf.rnn_dropout,
-                cf.pretrained,
-                cf.pretrained_size,
-                cf.projection)
-
-        self.num_directions = 2 if cf.bidirectional else 1
-        self.encoder_linear = nn.Linear(cf.hidden_size, 3)
-=======
                 decoder_embed,
                 cf.mlp1_size,
                 cf.rnn_dropout,
@@ -108,7 +67,6 @@ class EnLMSeq2seq(nn.Module):
 
         self.num_directions = 2 if cf.bidirectional else 1
         self.encoder_linear = nn.Linear(cf.hidden_size, len(src_vocab))
->>>>>>> 55fe0e629df9c0ffc3e14b6457a5bafd9353cfff
         params = list(self.encoder.parameters()) +  list(self.decoder.parameters())
         self.optimizer = getattr(torch.optim, cf.optimizer)(params, **cf.optimizer_kwargs)
         
@@ -130,11 +88,7 @@ class EnLMSeq2seq(nn.Module):
         lm_loss = self.loss(input=encoder_logits.view(batch_size*en_seq_len, -1),\
                 target=batch['src_out'][:,:en_seq_len].contiguous().view(-1))
         self.optimizer.zero_grad()
-<<<<<<< HEAD
-        total_loss = loss + self.config.clf_coef * lm_loss
-=======
         total_loss = loss + self.config.lm_coef * lm_loss
->>>>>>> 55fe0e629df9c0ffc3e14b6457a5bafd9353cfff
         total_loss.backward()
         self.optimizer.step()
         return loss.item(), batch_size
@@ -150,9 +104,6 @@ class EnLMSeq2seq(nn.Module):
         tgt_in, len_tgt = batch['tgt_in'],  batch['len_tgt']
         src_last, src_outputs = self.encoder(src, len_src)
         preds = self.decoder.greedy_decode(src_last, self.sos_idx, self.eos_idx, src_outputs, len_src)
-<<<<<<< HEAD
-        return preds
-=======
         return preds
 
       
@@ -378,4 +329,3 @@ class BiClfSeq2seqExt(nn.Module):
         return preds
 
           
->>>>>>> 55fe0e629df9c0ffc3e14b6457a5bafd9353cfff
