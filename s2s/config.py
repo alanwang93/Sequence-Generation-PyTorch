@@ -57,24 +57,37 @@ class EnLM(Config):
         self.lm_coef = 0.5
 
 
-class Vanilla(Config):
+class Vanilla_GigawordSmall(Config):
     def __init__(self, raw_root, data_root, model_path):
         super().__init__(raw_root, data_root, model_path)
         self.model = 'Seq2seq'
-        self.dataset = Gigaword(raw_root, data_root)
-        self.hidden_size = 512
-        self.num_layers = 1
+        self.dataset = GigawordSmall(raw_root, data_root)
+        self.hidden_size = 256
+        self.num_layers = 2
         self.embed_size = 300
         self.bidirectional = True
-        self.embed_dropout = 0.3
-        self.rnn_dropout = 0.1
-        self.mlp_dropout = 0.3
+        self.embed_dropout = 0.0
+        self.rnn_dropout = 0.0
+        self.mlp_dropout = 0.2
+        self.attn_type = 'bilinear'
         # embedding
-        self.pretrained = 'glove.6B.300d.txt'
-        self.pretrained_size = 300
+        self.pretrained = None #'glove.6B.300d.txt'
+        self.pretrained_size = None #300
         self.projection = None
         #self.clf_coef = 3.
-        self.mlp1_size = 400
+
+        self.optimizer = 'Adam'
+        self.optimizer_kwargs = dict(
+                lr=0.001, 
+                betas=(0.9, 0.999), 
+                eps=1e-08, 
+                weight_decay=0)
+        self.clip_norm = 5.
+
+        # log
+        self.log_freq = 100
+        self.eval_freq = 500
+
 
 
 class BiClfInternal(Config):

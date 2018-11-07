@@ -304,5 +304,141 @@ def build_dataloaders_biclf(
 
 
 
+def build_dataloaders_bidecode(
+        config, 
+        src_vocab, 
+        tgt_vocab, 
+        rebuild=False):
+    """
+    Dataloader for task with bidirectional decoding
+
+    src_in: t0, ... tn
+    len_src:
+    tgt_in: SOS, t0, .. tn
+    tgt_in_rvs: SOS, tn, ... t0
+    tgt_out: t0, ... tn, EOS
+    tgt_out_rvs: tn, ... t0, EOS
+    len_tgt:
+    """
+    cf = config
+    dc = config.dataset # data config
+    max_len_src = dc.max_len_src
+    max_len_tgt = dc.max_len_tgt
+    dataloaders = []
+    for prefix in [dc.train_prefix,
+                   dc.dev_prefix,
+                   dc.test_prefix]:
+        
+        prefix_file = os.path.join(dc.raw, prefix)
+        src_file = prefix_file + '.' + dc.src
+        tgt_file = prefix_file + '.' + dc.tgt
+        examples = []
+        
+        prefix_npz = os.path.join(dc.path, prefix)
+        src_npz =  prefix_npz + '.' + dc.src + '.npz'
+        tgt_npz = prefix_npz + '.' + dc.tgt + '.npz'
+
+        if os.path.exists(src_npz) and os.path.exists(tgt_npz) and not rebuild:
+            print('Loading dataloaders...')
+            start = time.time()
+            src_data = np.load(src_npz)
+            all_src = src_data['src']
+            all_len_src = src_data['len_src']
+            tgt_data = np.load(tgt_npz)
+            all_tgt = tgt_data['tgt']
+            all_tgt_rvs = tgt_data['tgt_rvs']
+            all_len_tgt = tgt_data['len_tgt']
+            all_len_tgt_rvs = tgt_data['len_tgt_rvs']
+            print('Loading takes {0:.3f} s'.format(time.time()-start))
+        else:
+            print('Building dataloaders...')
+            with open(src_file, 'r') as s, open(tgt_file, 'r') as t:
+                start = time.time()
+
+                all_len_src, all_len_tgt = [], []
+                all_src, all_tgt = [], []
+                all_tgt_rvs, all_len_tgt_rvs = [], []
+                k = 0
+                for src, tgt in zip(s, t):
+                    k += 1
+                    if k % 1000 == 0:
+                        print(k, flush=True)
+
+                    str_src = src.strip().lower().split(' ')[:max_len_src]
+                    len_src = len(str_src)
+                    src = src_vocab.toi(str_src)
+                    src = np.pad(src, (0, max_len_src-len_src), 'constant', constant_values=0)
+                    
+                    str_tgt = tgt.strip().lower().split(' ')[:max_len_tgt-1] # max_len_tgt == final idx tensor length
+                    len_tgt = len(str_tgt) 
+                    tgt = tgt_vocab.toi(str_tgt[:len_tgt//2])
+                    tgt_rvs = tgt_vocab.toi(str_tgt[len_tgt//2:][::-1])
+                    len_tgt = len(tgt) + 1# including EOS or SOS
+                    len_tgt_rvs = len(tgt_rvs) + 1# including EOS or SOS
+                    tgt = np.pad(tgt, (0, max_len_tgt-len_tgt+1), 'constant', constant_values=0)
+                    tgt_rvs = np.pad(tgt_rvs, (0, max_len_tgt-len_tgt_rvs+1), 'constant', constant_values=0)
+
+                    all_len_src.append(len_src)
+                    all_len_tgt.append(len_tgt)
+                    all_len_tgt_rvs.append(len_tgt_rvs)
+                    all_src.append(src)
+                    all_tgt.append(tgt)
+                    all_tgt_rvs.append(tgt_rvs)
+                print('Processing data takes {0:.3f} s'.format(time.time()-start))
+                print('Saving processed data...')
+                np.savez(src_npz, src=np.asarray(all_src), len_src=np.asarray(all_len_src))
+                np.savez(tgt_npz, tgt=np.asarray(all_tgt), len_tgt=np.asarray(all_len_tgt),\
+                        tgt_rvs=np.asarray(all_tgt_rvs), len_tgt_rvs=np.asarray(all_len_tgt_rvs))
+                
+                
+        for i in range(len(all_len_src)):
+            tgt = all_tgt[i]
+            tgt_rvs = all_tgt_rvs[i]
+            src_in = all_src[i]
+            len_tgt = all_len_tgt[i]
+            len_tgt_rvs = all_len_tgt_rvs[i]
+            len_src = all_len_src[i]
+            tgt_in = np.concatenate(([dc.sos_idx], tgt[:-1]))
+            tgt_rvs_in = np.concatenate(([dc.sos_idx], tgt_rvs[:-1]))
+            tgt[len_tgt-1] = dc.eos_idx
+            tgt_rvs[len_tgt_rvs-1] = dc.eos_idx
+
+            example = {
+                    'src_in': src_in, 
+                    'src_out': src_out, 
+                    'tgt_in': tgt_in,
+                    'tgt_rvs_in': tgt_rvs_in,
+                    'tgt_out': tgt,
+                    'tgt_rvs_out': tgt_rvs,
+                    'len_src': len_src,
+                    'len_tgt': len_tgt,
+                    'len_tgt_rvs': len_tgt_rvs,
+                    #'str_src': str_src,
+                    #'str_tgt': str_tgt
+                    }
+            examples.append(example)
+
+        if prefix in [dc.train_prefix, dc.dev_prefix]:
+            dataloader = data.DataLoader(
+                DictDataset(examples),
+                batch_size=cf.batch_size,
+                shuffle=True,
+                num_workers=4,
+                collate_fn=dict_collate_fn)
+        else:
+            dataloader = data.DataLoader(
+                DictDataset(examples),
+                batch_size=cf.batch_size,
+                shuffle=False,
+                num_workers=4,
+                collate_fn=dict_collate_fn)
+
+        dataloaders.append(dataloader)
+    
+    train, dev, test = dataloaders
+    
+    return train, dev, test
+
+
 
 

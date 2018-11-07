@@ -18,6 +18,7 @@ from s2s.utils.utils import update_config, init_logging, to, compute_metrics
 from s2s.utils.summary import Summary
 
 def test(args):
+    assert args.restore is not None
 
     model_path = os.path.join(args.model_root, args.config, args.suffix)
     if not os.path.exists(model_path):
@@ -63,7 +64,7 @@ def test(args):
     model = model.to(device)
 
     # restore checkpoints
-    checkpoint = torch.load(args.restore)
+    checkpoint = torch.load(args.restore, map_location=device)
 
     model.load_state_dict(checkpoint['state_dict'])
     step = checkpoint['step']
@@ -130,9 +131,10 @@ def test(args):
     for k, v in test_metrics.items():
         logger.info('[Test]\t{0}: {1:.5f}'.format(k, v))
 
+    fout = open('test.out', 'w')
     for i in range(len(test_refs)):
         logger.info('[Test] Sample:\nref: {0}\nhyp: {1}\n'.format(test_refs[i], test_hyps[i]))
-
+        fout.write('{0}\t{1}\n'.format(test_refs[i], test_hyps[i]))
 
 
 

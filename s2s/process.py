@@ -10,13 +10,13 @@ from s2s.utils.vocab import Vocab
 
 def main(args):
 
-    dc = getattr(datasets, args.config)(args.data_path)
+    dc = getattr(datasets, args.config)(args.raw_root, args.data_root)
 
     # Vocab files are under model path
     if args.vocab:
         print('Building vocab')
         if dc.share_vocab:
-            vocab = Vocab(path=args.model_path, max_vocab=dc.max_src_vocab, \
+            vocab = Vocab(path=dc.path, max_vocab=dc.max_src_vocab, \
                     min_freq=dc.min_freq, unk_token=dc.unk_token)
             vocab._init_vocab()
             src_file = '{0}.{1}'.format(dc.train_prefix, dc.src)
@@ -27,20 +27,16 @@ def main(args):
             vocab._finish()
             vocab.summary()
         else:
-            src_vocab = Vocab(path=args.model_path, max_vocab=dc.max_src_vocab, \
+            src_vocab = Vocab(path=dc.path, max_vocab=dc.max_src_vocab, \
                     min_freq=dc.min_freq, prefix='src', unk_token=dc.unk_token)
-            tgt_vocab = Vocab(path=args.model_path, max_vocab=dc.max_tgt_vocab, \
+            tgt_vocab = Vocab(path=dc.path, max_vocab=dc.max_tgt_vocab, \
                     min_freq=dc.min_freq, prefix='tgt', unk_token=dc.unk_token)
-            src_file = '{0}.{1}'.format(dc.train_prefix, dc.src)
-            tgt_file = '{0}.{1}'.format(dc.train_prefix, dc.tgt)
+            src_file = '{0}.{1}'.format(os.path.join(dc.raw, dc.train_prefix), dc.src)
+            tgt_file = '{0}.{1}'.format(os.path.join(dc.raw, dc.train_prefix), dc.tgt)
             src_corpus = dc.build_corpus(src_file)
             tgt_corpus = dc.build_corpus(tgt_file)
-            src_vocab._init_vocab()
-            tgt_vocab._init_vocab()
-            src_vocab.update(src_corpus)
-            tgt_vocab.update(tgt_corpus)
-            src_vocab._finish()
-            tgt_vocab._finish()
+            src_vocab.build(rebuild=True, data=src_corpus)
+            tgt_vocab.build(rebuild=True, data=tgt_corpus)
             src_vocab.summary()
             tgt_vocab.summary()
 
@@ -82,8 +78,10 @@ if __name__ == '__main__':
             help='(Re)build vocabulary')
     # parser.add_argument('--embed', dest='embed', action='store_true')
     parser.add_argument('--extract', dest='extract', action='store_true')
-    parser.add_argument('--data_path', default=None, help='data root directory')
-    parser.add_argument('--model_path', default=None, help='model root directory')
+    parser.add_argument('--model_root', type=str, default='checkpoints')
+    parser.add_argument('--data_root', type=str, default='data')
+    parser.add_argument('--raw_root', type=str, default='raw')
+
     args = parser.parse_args()
     main(args)
 

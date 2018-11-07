@@ -73,10 +73,11 @@ class Vocab:
             max_vocab = None if self.max_vocab is None else self.max_vocab + len(self.itos)
             words_and_frequencies = list(self.freqs.items())
             words_and_frequencies.sort(key=lambda tup: tup[1], reverse=True) # sort by order
-
+            vocab_file = open(os.path.join(self.path, '{0}_vocab.txt'.format(self.prefix)), 'w')
             for word, freq in words_and_frequencies:
-                if not (freq < min_freq or len(self.itos) == max_vocab) and word not in self.itos:
+                if not (freq < min_freq or len(self.itos) >= max_vocab) and word not in self.itos:
                     self.itos.append(word)
+                    vocab_file.write('{0}\t{1}\n'.format(word, freq))
             self.stoi.update({tok: i for i, tok in enumerate(self.itos)})
             self._dump()
 
@@ -156,9 +157,9 @@ class Vocab:
         with open(os.path.join(self.path, '{0}_vocab_summary.txt'.format(self.prefix)), 'w') as f:
             f.write(s)
 
-        with open(os.path.join(self.path, '{0}_vocab.txt'.format(self.prefix)), 'w') as f:
-            for w in self.itos:
-                f.write(w + '\n')
+        #with open(os.path.join(self.path, '{0}_vocab.txt'.format(self.prefix)), 'w') as f:
+        #    for w in self.itos:
+        #        f.write(w + '\n')
 
 
     def __len__(self):

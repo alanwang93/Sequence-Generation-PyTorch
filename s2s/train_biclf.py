@@ -261,8 +261,6 @@ def train(args):
                 torch.save(checkpoint, cp_path)
                 logger.info('[Save] Model saved to {0}'.format(cp_path))
                
-
-
                 # dev_loss_all += dev_loss
                 # print('dev loss', dev_loss)
 

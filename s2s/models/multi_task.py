@@ -324,7 +324,7 @@ class BiClfSeq2seqExt(nn.Module):
         src_last, src_output = self.encoder(src, len_src)
         clf_last, clf_output = self.clf_encoder(src, len_src)
         encoder_logits = self.encoder_linear(clf_output)
-        cat_output = troch.tanh(self.output_linear(torch.cat((src_output, clf_output), -1)))
+        cat_output = torch.tanh(self.output_linear(torch.cat((src_output, clf_output), -1)))
         preds = self.decoder.greedy_decode(src_last, self.sos_idx, self.eos_idx, cat_output, len_src)
         return preds
 

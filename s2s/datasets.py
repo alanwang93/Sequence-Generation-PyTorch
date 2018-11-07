@@ -3,9 +3,6 @@
 
 import os
 
-__all__ = ['Gigaword', 'BiClfGigaword', 'TestData', 'TestData2', 'BiClfTestData', 
-        'BiClfInternalData']
-
 class DataConfig:
     
     def __init__(self, raw_root, data_root):
@@ -77,9 +74,42 @@ class DataConfig:
         return corpus
 
 
+class GigawordSmall(DataConfig):
+    """
+    Full original gigaword dataset, the `UNK` token in test file
+    is replaced by <unk>
+    """
+
+    def __init__(self, raw_root, data_root):
+        super().__init__(raw_root, data_root)
+        
+        self.name = 'GigawordsSmall'
+        self.raw = os.path.join(self.raw_root, 'giga_small')
+        self.path = os.path.join(self.data_root, 'giga_small')
+
+        self.train_prefix = 'train.small'
+        self.dev_prefix = 'dev.small'
+        self.test_prefix = 'test.filtered'
+        
+        # sentence
+        self.max_src_len = 120
+        self.max_tgt_len = 30
+        self.src_out = False
+        
+        # Vocabulary
+        self.share_vocab = False
+        self.max_src_vocab = 200000
+        self.max_tgt_vocab = 100000
+        self.min_freq = 3
+        self.lower = True
+        self.dataloader = 'build_dataloaders'
+
+        self.unk_token = '<unk>'
+
 class Gigaword(DataConfig):
     """
-    use `train.py`
+    Full original gigaword dataset, the `UNK` token in test file
+    is replaced by <unk>
     """
 
     def __init__(self, raw_root, data_root):
@@ -104,6 +134,7 @@ class Gigaword(DataConfig):
         self.max_tgt_vocab = 100000
         self.min_freq = 0
         self.lower = True
+        self.dataloader = 'build_dataloaders'
 
         self.unk_token = '<unk>'
 
@@ -134,6 +165,42 @@ class BiClfGigaword(DataConfig):
         self.max_tgt_vocab = 100000
         self.min_freq = 0
         self.lower = True
+
+        self.dataloader = 'build_dataloaders_biclf'
+
+        self.unk_token = '<unk>'
+
+
+
+class BiDecodeGigaword(DataConfig):
+    """
+    use `train.py`
+    """
+
+    def __init__(self, raw_root, data_root):
+        super().__init__(raw_root, data_root)
+        
+        self.name = 'BiDecodeGigawords'
+        self.raw = os.path.join(self.raw_root, 'giga')
+        self.path = os.path.join(self.data_root, 'bidecode_giga')
+
+        self.train_prefix = 'train'
+        self.dev_prefix = 'dev'
+        self.test_prefix = 'test.filtered'
+        
+        # sentence
+        self.max_src_len = 120
+        self.max_tgt_len = 50
+        self.src_out = False
+        
+        # Vocabulary
+        self.share_vocab = False
+        self.max_src_vocab = 200000
+        self.max_tgt_vocab = 100000
+        self.min_freq = 0
+        self.lower = True
+
+        self.dataloader = 'build_dataloaders_bidecode'
 
         self.unk_token = '<unk>'
 
@@ -214,8 +281,6 @@ class BiClfTestData(DataConfig):
         self.lower = True    
 
         self.unk_token = '<unk>'
-
-
 
 
 class BiClfInternalData(DataConfig):

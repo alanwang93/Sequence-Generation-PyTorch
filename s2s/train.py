@@ -13,6 +13,7 @@ import numpy as np
 import s2s.config as config
 import s2s.models as models
 from s2s.utils.dataloader import build_dataloaders
+import s2s.utils.dataloader as dataloader
 from s2s.utils.vocab import Vocab
 from s2s.utils.utils import update_config, init_logging, to, compute_metrics
 from s2s.utils.summary import Summary
@@ -68,7 +69,8 @@ def train(args):
     cf.src_vocab_size = len(src_vocab)
     cf.tgt_vocab_size = len(tgt_vocab)
 
-    train, dev, test = build_dataloaders(cf, src_vocab, tgt_vocab, args.rebuild)
+    dataloader_builder = getattr(dataloader, dc.dataloader)
+    train, dev, test = dataloader_builder(cf, src_vocab, tgt_vocab, args.rebuild)
     n_train, n_dev, n_test = map(len, [train, dev, test])
     logger.info('Dataset sizes: train {0}, dev {1}, test {2}'.format(n_train, n_dev, n_test))
 
@@ -118,7 +120,6 @@ def train(args):
             step += 1
             epoch = step//n_train
 
-            #print(src_vocab.tos([train_batch['src_in'][0][train_batch['len_src'][0]-1]]))
 
             if step % cf.log_freq == 0:
 
@@ -131,8 +132,6 @@ def train(args):
                 train_loss = 0
                 n_train_batch = 0
 
-            # logits = self.forward(batch)
-            # preds = model.greedy_decode(batch)
 
             # eval on dev set
             if step % cf.eval_freq == 0:
@@ -199,13 +198,6 @@ def train(args):
                 for k, v in test_metrics.items():
                     logger.info('[Test]\t{0}: {1:.5f}'.format(k, v))
 
-                if cf.is_better(dev_metrics[cf.metric], best_dev_metric):
-                    best_step = step
-                    best_dev_metric = dev_metrics[cf.metric]
-                    best_test_metric = test_metrics[cf.metric]
-                    for name in dev_metrics:
-                        best_metrics['dev_' + name] = dev_metrics[name]
-                    best_summ.write(best_step, best_metrics)
 
                 if cf.is_better(dev_metrics[cf.metric], best_dev_metric):
                     best_step = step
@@ -256,7 +248,7 @@ def train(args):
                 # save model for this epoch
                 checkpoint = dict(
                         state_dict=model.state_dict(),
-                        optimizer_state=optimizer.state_dict(),
+                        optimizer_state=model.optimizer.state_dict(),
                         step=step,
                         best_dev_metric=best_dev_metric,
                         best_test_metric=best_test_metric,
@@ -264,20 +256,6 @@ def train(args):
                 cp_path = os.path.join(model_path, 'epoch_{0}.pkl'.format(epoch))
                 torch.save(checkpoint, cp_path)
                 logger.info('[Save] Model saved to {0}'.format(cp_path))
-               
-
-
-                # dev_loss_all += dev_loss
-                # print('dev loss', dev_loss)
-
-            # eval on test set
-            #test_loss = model.get_loss(batch)
-            #print('test loss', dev_loss)
-
-
-            # save logs
-
-            # save model
 
             if step >= cf.max_step:
                 # stop training

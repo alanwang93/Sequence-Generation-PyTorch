@@ -58,9 +58,9 @@ class Seq2seq(nn.Module):
                 cf.hidden_size,
                 cf.num_layers,
                 decoder_embed,
-                cf.mlp1_size,
                 cf.rnn_dropout,
-                cf.mlp_dropout)
+                cf.mlp_dropout,
+                cf.attn_type)
 
         self.num_directions = 2 if cf.bidirectional else 1
 
@@ -143,9 +143,9 @@ class SelfFusionSeq2seq(nn.Module):
                 cf.hidden_size,
                 cf.num_layers,
                 decoder_embed,
-                #cf.mlp1_size,
                 cf.rnn_dropout,
-                cf.mlp_dropout)
+                cf.mlp_dropout,
+                cf.attn_type)
 
         self.num_directions = 2 if cf.bidirectional else 1
 

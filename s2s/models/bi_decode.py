@@ -47,29 +47,6 @@ class Decoder(nn.Module):
         pass
 
     def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=10):
-        """
-        inputs (batch, 1, dim)
-        """
-        batch_size = hidden.size(1)
-        logits = []
-        preds = []
-        inp = sos_idx * torch.ones((batch_size, 1), dtype=torch.long).to(hidden.device)
-        while True:
-            logit, output, hidden = self.step(inp, hidden, context, context_lengths)
-            logp = F.log_softmax(logit, dim=2)
-            maxv, maxidx = torch.max(logp, dim=2)
-            if ((maxidx == eos_idx).all() and len(preds) > 0)  or len(preds) >= max_length:
-                break
-            logits.append(logit)
-            preds.append(maxidx.cpu().numpy())
-            inp = maxidx
-        logits = torch.cat(logits, dim=1)
-        preds = np.concatenate(preds, 1)
-        # print(preds.shape)
-        return preds
-        
-    
-    def beam_search(self, inputs, lengths, hidden=None, context=None, context_lengths=None):
         pass
 
     def sample(self, inputs, lengths, hidden=None, context=None, context_lengths=None, temperature=None):
@@ -81,9 +58,15 @@ class RNNDecoder(Decoder):
     def __init__(self,
             hidden_size,
             num_layers,
+            #embed_size,
+            #vocab,
             embed,
+            mlp1_size,
             dropout=0.0,
             mlp_dropout=0.0):
+            #pretrained=None,
+            #pretrained_size=None,
+            #projection=False):
 
         super().__init__()
         
@@ -95,6 +78,7 @@ class RNNDecoder(Decoder):
         self.dropout = dropout
 
         self.embedding = embed
+        self.mlp1_size = mlp1_size
 
         self.cell = 'gru'
         # TODO
@@ -107,6 +91,9 @@ class RNNDecoder(Decoder):
 
         # TODO: flexible hidden_size
         self.mlp1 = nn.Linear(
+                self.hidden_size,
+                self.vocab_size)
+        self.mlp2 = nn.Linear(
                 self.hidden_size,
                 self.vocab_size)
 
@@ -165,9 +152,9 @@ class AttnRNNDecoder(Decoder):
             hidden_size,
             num_layers,
             embed,
-            dropout=0., 
-            mlp_dropout=0.,
-            attn_type='bilinear'):
+         #   mlp1_size,
+            dropout=0.,
+            mlp_dropout=0.):
 
         super().__init__()
         
@@ -175,9 +162,9 @@ class AttnRNNDecoder(Decoder):
         self.num_layers = num_layers
         self.embed_size = embed.embed_size
         self.vocab_size = embed.vocab_size
-        self.attn_type = attn_type
 
         self.embedding = embed
+        #self.mlp1_size = mlp1_size
         self.cell = 'gru'
 
         # TODO
@@ -192,9 +179,13 @@ class AttnRNNDecoder(Decoder):
         self.mlp1 = nn.Linear(
                 self.hidden_size,
                 self.vocab_size)
+        #self.mlp2 = nn.Linear(
+        #        self.mlp1_size,
+        #        self.vocab_size)
 
         self.dropout = nn.Dropout(mlp_dropout)
 
+        self.attn_type = 'symmetric'
         if self.attn_type == 'symmetric':
             self.inter_dim = 200
             self.D = nn.Linear(hidden_size, self.inter_dim, bias=False)
@@ -204,9 +195,6 @@ class AttnRNNDecoder(Decoder):
             self.inter_dim = hidden_size
             self.W = nn.Linear(2*hidden_size, self.inter_dim, bias=False) 
             self.v = nn.Linear(self.inter_dim, 1, bias=False)
-            self.attn_out = nn.Linear(hidden_size*2, hidden_size)
-        elif self.attn_type == 'bilinear':
-            self.W = nn.Linear(hidden_size, hidden_size, bias=False)
             self.attn_out = nn.Linear(hidden_size*2, hidden_size)
         self.init_weights()
 
@@ -250,20 +238,13 @@ class AttnRNNDecoder(Decoder):
             p_attn = F.softmax(scores, -1)
             weighted = torch.matmul(p_attn, context)
             new_output = F.tanh(self.attn_out(torch.cat([output, weighted], -1)))
-        elif self.attn_type == 'bilinear':
-            scores = self.W(context)
-            scores = torch.matmul(output, scores.transpose(1,2))
-            scores = scores.masked_fill(mask == 0, -1e9)
-            # batch, tgt_len, src_len
-            p_attn = F.softmax(scores, -1)
-            weighted = torch.matmul(p_attn, context)
-            new_output = F.tanh(self.attn_out(torch.cat([output, weighted], -1)))
-
 
         new_output = self.dropout(new_output)
         logit = self.mlp1(new_output.squeeze(1))
-        logit = self.dropout(logit).unsqueeze(1)
-        return logit, new_output, h_n
+        #logit = F.tanh(logit)
+        logit = self.dropout(logit)
+        #logit = self.mlp2(logit)
+        return logit.unsqueeze(1), new_output, h_n
 
     def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
         """
@@ -275,7 +256,7 @@ class AttnRNNDecoder(Decoder):
 
         mask = sequence_mask(context_lengths, context.size(1)).unsqueeze(1)
 
-        # batch_size, seq_len, dim
+        # batch_size, len, dim
         if self.attn_type == 'symmetric':
             outputs_ = F.relu(self.D(outputs))
             context_ = F.relu(self.D(context))
@@ -290,18 +271,11 @@ class AttnRNNDecoder(Decoder):
             p_attn = F.softmax(scores, -1)
             weighted = torch.matmul(p_attn, context)
             new_outputs = F.tanh(self.attn_out(torch.cat([outputs, weighted], -1)))
-        elif self.attn_type == 'bilinear':
-            scores = self.W(context) # batch, src_len, dim
-            scores = torch.matmul(outputs, scores.transpose(1,2))
-            scores = scores.masked_fill(mask == 0, -1e9)
-            # batch, tgt_len, src_len
-            p_attn = F.softmax(scores, -1)
-            weighted = torch.matmul(p_attn, context)
-            new_outputs = F.tanh(self.attn_out(torch.cat([outputs, weighted], -1)))
-
 
         new_outputs = self.dropout(new_outputs)
         logits = self.mlp1(new_outputs)
+        #logits = F.tanh(logits)
         logits = self.dropout(logits)
+        #logits = self.mlp2(logits)
         return logits
 
