@@ -171,6 +171,38 @@ class BiClfGigaword(DataConfig):
         self.unk_token = '<unk>'
 
 
+class MTGigawordSmall(DataConfig):
+    """
+    Full original gigaword dataset, the `UNK` token in test file
+    is replaced by <unk>
+    """
+
+    def __init__(self, raw_root, data_root):
+        super().__init__(raw_root, data_root)
+        
+        self.name = 'MTGigawordsSmall'
+        self.raw = os.path.join(self.raw_root, 'giga_small')
+        self.path = os.path.join(self.data_root, 'mt_giga_small')
+
+        self.train_prefix = 'train.small'
+        self.dev_prefix = 'dev.small'
+        self.test_prefix = 'test.filtered'
+        
+        # sentence
+        self.max_src_len = 120
+        self.max_tgt_len = 30
+        self.src_out = False
+        
+        # Vocabulary
+        self.share_vocab = False
+        self.max_src_vocab = 200000
+        self.max_tgt_vocab = 100000
+        self.min_freq = 3
+        self.lower = True
+        self.dataloader = 'build_dataloaders_biclf'
+
+        self.unk_token = '<unk>'
+
 
 class BiDecodeGigaword(DataConfig):
     """
@@ -203,6 +235,37 @@ class BiDecodeGigaword(DataConfig):
         self.dataloader = 'build_dataloaders_bidecode'
 
         self.unk_token = '<unk>'
+
+
+
+class CNN(DataConfig):
+
+    def __init__(self, raw_root, data_root):
+        super().__init__(raw_root, data_root)
+        
+        self.name = 'CNN'
+        self.raw = os.path.join(self.raw_root, 'cnn')
+        self.path = os.path.join(self.data_root, 'cnn')
+
+        self.train_prefix = 'train.txt'
+        self.dev_prefix = 'val.txt'
+        self.test_prefix = 'test.txt'
+        
+        # sentence
+        self.max_src_len = 400
+        self.max_tgt_len = 100
+        self.src_out = False
+        
+        # Vocabulary
+        self.share_vocab = False
+        self.max_src_vocab = 50000
+        self.max_tgt_vocab = 50000
+        self.min_freq = 1
+        self.lower = True
+        self.dataloader = 'build_dataloaders'
+
+        #self.unk_token = '<unk>'
+
 
 class TestData(DataConfig):
     def __init__(self, raw_root, data_root):

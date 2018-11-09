@@ -20,7 +20,7 @@ from s2s.utils.summary import Summary
 
 def train(args):
 
-    model_path = os.path.join(args.model_root, args.config, args.suffix)
+    model_path = os.path.join(args.model_root, args.config+'_'+args.dataset, args.suffix)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
@@ -35,7 +35,8 @@ def train(args):
         # restore config
         cf = pickle.load(open(config_path, 'rb'))
     else:
-        cf = getattr(config, args.config)(args.raw_root, args.data_root, model_path)
+        cf = getattr(config, args.config)(
+                args.raw_root, args.data_root, model_path, args.dataset)
 
     if args.params is not None:
         # update config
@@ -113,7 +114,7 @@ def train(args):
 
             # train
             model.train()
-            train_batch = to(train_batch, device) 
+            train_batch = to(train_batch, device)
             train_loss_, n_train_batch_ = model.train_step(train_batch)
             train_loss += train_loss_*n_train_batch_
             n_train_batch += n_train_batch_

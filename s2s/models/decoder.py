@@ -82,8 +82,9 @@ class RNNDecoder(Decoder):
             hidden_size,
             num_layers,
             embed,
-            dropout=0.0,
-            mlp_dropout=0.0):
+            rnn_dropout=0.,
+            mlp_dropout=0.,
+            attn_type=None):
 
         super().__init__()
         
@@ -91,9 +92,9 @@ class RNNDecoder(Decoder):
         self.num_layers = num_layers
         self.embed = embed
         self.vocab_size = embed.vocab_size
-        self.embed_size = embed.vocab_size
-        self.dropout = dropout
+        self.embed_size = embed.embed_size
 
+        #self.dropout = dropout
         self.embedding = embed
 
         self.cell = 'gru'
@@ -103,7 +104,7 @@ class RNNDecoder(Decoder):
                 hidden_size = self.hidden_size,
                 num_layers = self.num_layers,
                 batch_first=True,
-                dropout=dropout)
+                dropout=rnn_dropout)
 
         # TODO: flexible hidden_size
         self.mlp1 = nn.Linear(
@@ -134,27 +135,18 @@ class RNNDecoder(Decoder):
         # output: (batch, 1, hidden_size)
         output, h_n = self.rnn(inputs, hidden)
         # (batch, 1, vocab_size)
-        logit = self.linear_out(output.squeeze(1))
+        logit = self.mlp1(output.squeeze(1))
         return logit.unsqueeze(1), output, h_n
+
 
     def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
         """
         
         """
-        batch_size, seq_len = inputs.size()
+        #batch_size, seq_len = inputs.size()
         embedded = self.embedding(inputs)
         outputs, h_n = self.rnn(embedded, hidden)
-
-        #logits = self.linear_out(outputs)
-        #inputs = inputs.split(1, 1)
-        #logits = []
-        #outputs = []
-        #for inp in inputs:
-        #    logit, output, hidden = self.step(inp, hidden)
-        #    logits.append(logit)
-        #    outputs.append(output)
-        #outputs = torch.cat(outputs, 1)
-        logits = self.linear_out(outputs)
+        logits = self.mlp1(outputs)
         return logits
 
 
@@ -165,7 +157,7 @@ class AttnRNNDecoder(Decoder):
             hidden_size,
             num_layers,
             embed,
-            dropout=0., 
+            rnn_dropout=0., 
             mlp_dropout=0.,
             attn_type='bilinear'):
 
@@ -186,7 +178,7 @@ class AttnRNNDecoder(Decoder):
                 hidden_size = self.hidden_size,
                 num_layers = self.num_layers,
                 batch_first=True,
-                dropout=dropout)
+                dropout=rnn_dropout)
 
         # TODO: flexible hidden_size
         self.mlp1 = nn.Linear(
@@ -202,12 +194,16 @@ class AttnRNNDecoder(Decoder):
             self.attn_out = nn.Linear(hidden_size*2, hidden_size)
         elif self.attn_type == 'add':
             self.inter_dim = hidden_size
-            self.W = nn.Linear(2*hidden_size, self.inter_dim, bias=False) 
+            self.Wh = nn.Linear(hidden_size, self.inter_dim, bias=False) 
+            self.Ws = nn.Linear(hidden_size, self.inter_dim) 
             self.v = nn.Linear(self.inter_dim, 1, bias=False)
             self.attn_out = nn.Linear(hidden_size*2, hidden_size)
         elif self.attn_type == 'bilinear':
             self.W = nn.Linear(hidden_size, hidden_size, bias=False)
             self.attn_out = nn.Linear(hidden_size*2, hidden_size)
+
+        self.score_layer = '2linear'
+
         self.init_weights()
 
     def init_weights(self):
@@ -245,8 +241,10 @@ class AttnRNNDecoder(Decoder):
             weighted = torch.matmul(p_attn, context)
             new_output = F.tanh(self.attn_out(torch.cat([output, weighted], -1)))
         elif self.attn_type == 'add':
-            scores = self.v(self.W(np.concatenate((context, output), -1)))
+            scores = torch.tanh(self.Wh(context) + self.Ws(output))
+            scores = self.v(scores).transpose(1,2)
             scores = scores.masked_fill(mask == 0, -1e9)
+
             p_attn = F.softmax(scores, -1)
             weighted = torch.matmul(p_attn, context)
             new_output = F.tanh(self.attn_out(torch.cat([output, weighted], -1)))
@@ -270,7 +268,17 @@ class AttnRNNDecoder(Decoder):
         
         """
         batch_size, seq_len = inputs.size()
-        embedded = self.embedding(inputs)
+        #embedded = self.embedding(inputs)
+        #outputs = []
+        logits = []
+        for inp_t in inputs.split(1, dim=1):
+            logit, output, hidden = self.step(inp_t, hidden, context, context_lengths)
+            logits.append(logit)
+            #outputs.append(output)
+        #outputs = torch.stack(outputs, 1)
+        logits = torch.stack(logits, 1).squeeze(2)
+        return logits
+"""
         outputs, h_n = self.rnn(embedded, hidden)
 
         mask = sequence_mask(context_lengths, context.size(1)).unsqueeze(1)
@@ -285,7 +293,9 @@ class AttnRNNDecoder(Decoder):
             weighted = torch.matmul(p_attn, context)
             new_outputs = F.tanh(self.attn_out(torch.cat([outputs, weighted], -1)))
         elif self.attn_type == 'add':
-            scores = self.v(self.W(torch.cat((context, outputs), -2)))
+            scores = torch.tanh(self.Wh(context).unsqueeze(1).expand(-1, outputs.size(1),-1,-1)\
+                    +  self.Ws(outputs).unsqueeze(2).expand(-1, -1, context.size(1), -1))
+            scores = self.v(scores).squeeze(-1)
             scores = scores.masked_fill(mask == 0, -1e9)
             p_attn = F.softmax(scores, -1)
             weighted = torch.matmul(p_attn, context)
@@ -297,11 +307,12 @@ class AttnRNNDecoder(Decoder):
             # batch, tgt_len, src_len
             p_attn = F.softmax(scores, -1)
             weighted = torch.matmul(p_attn, context)
-            new_outputs = F.tanh(self.attn_out(torch.cat([outputs, weighted], -1)))
+            
+        if self.score_layer == '2linear':
+            new_outputs = self.attn_out(torch.cat([outputs, weighted], -1))
+            new_outputs = self.dropout(new_outputs)
+            logits = self.mlp1(new_outputs)
+            logits = self.dropout(logits)
+"""
 
-
-        new_outputs = self.dropout(new_outputs)
-        logits = self.mlp1(new_outputs)
-        logits = self.dropout(logits)
-        return logits
 

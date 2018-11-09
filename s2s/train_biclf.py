@@ -223,6 +223,20 @@ def train(args):
                         best_metrics['dev_' + name] = dev_metrics[name]
                     best_summ.write(best_step, best_metrics)
 
+                    checkpoint = dict(
+                            state_dict=model.state_dict(),
+                            optimizer_state=model.optimizer.state_dict(),
+                            step=step,
+                            best_dev_metric=best_dev_metric,
+                            best_test_metric=best_test_metric,
+                            best_step=best_step)
+                    
+                    cp_path = os.path.join(model_path, 'best.pkl')
+                    torch.save(checkpoint, cp_path)
+                    logger.info('[Save] Model saved to {0}'.format(cp_path))
+
+   
+
                 best_metrics['dev_' + cf.metric] = best_dev_metric
                 best_metrics['test_' + cf.metric] = best_test_metric
 

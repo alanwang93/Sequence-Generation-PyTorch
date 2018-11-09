@@ -94,7 +94,7 @@ class Embedding(nn.Module):
             return embeddings
     
     def load_embeddings(self):
-        weights = np.random.randn(self.vocab_size, self.pretrained_size or self.embed_size)
+        weights = 0.02 * np.random.randn(self.vocab_size, self.pretrained_size or self.embed_size)
         weights[self.vocab.pad_idx] = 0.
         # Glove
         if self.pretrained is not None:

@@ -48,7 +48,7 @@ class RNNEncoder(Encoder):
             num_layers,
             embed,
             bidirectional=True,
-            dropout=0.2,
+            rnn_dropout=0.2,
             cell='gru'):
 
         super().__init__()
@@ -59,7 +59,7 @@ class RNNEncoder(Encoder):
         self.vocab_size = embed.vocab_size
         self.bidirectional = bidirectional
         self.num_directions = 2 if bidirectional else 1
-        self.dropout = dropout
+        #self.rnn_dropout = rnn_dropout
         self.cell = cell
         # embedding
         self.embedding = embed
@@ -71,7 +71,7 @@ class RNNEncoder(Encoder):
                 hidden_size = self.hidden_size,
                 num_layers = self.num_layers,
                 batch_first=True,
-                dropout=self.dropout,
+                dropout=rnn_dropout,
                 bidirectional=self.bidirectional)
 
         self.init_weights()
@@ -112,11 +112,13 @@ class RNNEncoder(Encoder):
         outputs = unpack(outputs, batch_first=True)[0]
         _, _indices = torch.sort(indices, 0)
         outputs = outputs[_indices]
+        h_n = h_n[:,_indices,:]
+        h_n = h_n.view(self.num_layers, self.num_directions, inputs.size(0), self.hidden_size)
+        outputs = outputs.view(outputs.size(0), outputs.size(1), self.num_directions, self.hidden_size)
         if not concat_output:
-            h_n = h_n.view(self.num_layers, self.num_directions, inputs.size(0), self.hidden_size)
             h_n = torch.mean(h_n, 1)
-            outputs = torch.mean(outputs.view(outputs.size(0), outputs.size(1), self.num_directions, self.hidden_size), 2)
-        return h_n, outputs
+            outputs = torch.mean(outputs, 2)
+        return outputs, h_n
 
 
 class SelfFusionEncoder(Encoder):
@@ -126,7 +128,7 @@ class SelfFusionEncoder(Encoder):
             num_layers,
             embed,
             bidirectional=True,
-            dropout=0.2,
+            rnn_dropout=0.2,
             cell='gru'):
 
         super().__init__()
@@ -137,7 +139,7 @@ class SelfFusionEncoder(Encoder):
         self.vocab_size = embed.vocab_size
         self.bidirectional = bidirectional
         self.num_directions = 2 if bidirectional else 1
-        self.dropout = dropout
+        #self.dropout = dropout
         self.cell = cell
         # embedding
         self.embedding = embed
@@ -149,7 +151,7 @@ class SelfFusionEncoder(Encoder):
                 hidden_size = self.hidden_size,
                 num_layers = self.num_layers,
                 batch_first=True,
-                dropout=self.dropout,
+                dropout=rnn_dropout,
                 bidirectional=self.bidirectional)
         self.attn_type = 'symmetric'
         if self.attn_type == 'symmetric':
@@ -200,6 +202,7 @@ class SelfFusionEncoder(Encoder):
         outputs = unpack(outputs, batch_first=True)[0]
         _, _indices = torch.sort(indices, 0)
         outputs = outputs[_indices]
+        h_n = h_n[:, _indices, :]
         if not concat_output:
             h_n = h_n.view(self.num_layers, self.num_directions, inputs.size(0), self.hidden_size)
             h_n = torch.mean(h_n, 1)
@@ -215,7 +218,7 @@ class SelfFusionEncoder(Encoder):
             new_outputs = F.tanh(self.attn_out(torch.cat([outputs, outputs*weighted], -1)))
 
         
-        return h_n, new_outputs
+        return new_outputs, h_n
 
 
 class CNNEncoder(Encoder):

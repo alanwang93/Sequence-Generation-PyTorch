@@ -108,7 +108,7 @@ class EnLMSeq2seq(nn.Module):
 
       
  
-class BiClfSeq2seq(nn.Module):
+class MTSeq2seq(nn.Module):
     def __init__(self, config, src_vocab, tgt_vocab, restore):
         super().__init__()
         cf = config
@@ -162,7 +162,6 @@ class BiClfSeq2seq(nn.Module):
                 cf.hidden_size,
                 cf.num_layers,
                 decoder_embed,
-                cf.mlp1_size,
                 cf.rnn_dropout,
                 cf.mlp_dropout)
         
@@ -177,9 +176,9 @@ class BiClfSeq2seq(nn.Module):
     def forward(self, batch):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
-        src_last, src_output = self.encoder(src, len_src)
+        src_output, src_last = self.encoder(src, len_src)
         logits = self.decoder(tgt_in, len_tgt, src_last, src_output, len_src)
-        clf_last, clf_output = self.clf_encoder(src, len_src)
+        clf_output, clf_last = self.clf_encoder(src, len_src)
         encoder_logits = self.encoder_linear(clf_output)
         return logits, encoder_logits
 
@@ -211,12 +210,12 @@ class BiClfSeq2seq(nn.Module):
     def greedy_decode(self, batch):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, len_tgt = batch['tgt_in'],  batch['len_tgt']
-        src_last, src_outputs = self.encoder(src, len_src)
+        src_outputs, src_last = self.encoder(src, len_src)
         preds = self.decoder.greedy_decode(src_last, self.sos_idx, self.eos_idx, src_outputs, len_src)
         return preds
 
   
-class BiClfSeq2seqExt(nn.Module):
+class MTSeq2seqExt(nn.Module):
     def __init__(self, config, src_vocab, tgt_vocab, restore):
         super().__init__()
         cf = config
@@ -270,9 +269,9 @@ class BiClfSeq2seqExt(nn.Module):
                 cf.hidden_size,
                 cf.num_layers,
                 decoder_embed,
-                #cf.mlp1_size,
                 cf.rnn_dropout,
-                cf.mlp_dropout)
+                cf.mlp_dropout,
+                cf.attn_type)
         
         self.num_directions = 2 if cf.bidirectional else 1
         self.encoder_linear = nn.Linear(cf.hidden_size, 3)
@@ -286,8 +285,8 @@ class BiClfSeq2seqExt(nn.Module):
     def forward(self, batch):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
-        src_last, src_output = self.encoder(src, len_src)
-        clf_last, clf_output = self.clf_encoder(src, len_src)
+        src_output, src_last = self.encoder(src, len_src)
+        clf_output, clf_last = self.clf_encoder(src, len_src)
         encoder_logits = self.encoder_linear(clf_output)
         cat_output = torch.tanh(self.output_linear(torch.cat((src_output, clf_output), -1)))
         logits = self.decoder(tgt_in, len_tgt, src_last, cat_output, len_src)
@@ -321,8 +320,8 @@ class BiClfSeq2seqExt(nn.Module):
     def greedy_decode(self, batch):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, len_tgt = batch['tgt_in'],  batch['len_tgt']
-        src_last, src_output = self.encoder(src, len_src)
-        clf_last, clf_output = self.clf_encoder(src, len_src)
+        src_output, src_last = self.encoder(src, len_src)
+        clf_output, clf_last = self.clf_encoder(src, len_src)
         encoder_logits = self.encoder_linear(clf_output)
         cat_output = torch.tanh(self.output_linear(torch.cat((src_output, clf_output), -1)))
         preds = self.decoder.greedy_decode(src_last, self.sos_idx, self.eos_idx, cat_output, len_src)

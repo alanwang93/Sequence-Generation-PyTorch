@@ -33,6 +33,8 @@ if __name__ == '__main__':
     parser.add_argument('--model_root', type=str, default='checkpoints')
     parser.add_argument('--data_root', type=str, default='data')
     parser.add_argument('--raw_root', type=str, default='raw')
+    
+    parser.add_argument('--dataset', type=str, default=None)
 
     args = parser.parse_args()
     main(args)
