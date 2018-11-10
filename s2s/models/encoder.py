@@ -72,9 +72,9 @@ class RNNEncoder(Encoder):
                 num_layers = self.num_layers,
                 batch_first=True,
                 dropout=rnn_dropout,
-                bidirectional=self.bidirectional)
+                bidirectional=True)
 
-        self.init_weights()
+        #self.init_weights()
 
     def init_weights(self):
         # RNN
@@ -113,11 +113,15 @@ class RNNEncoder(Encoder):
         _, _indices = torch.sort(indices, 0)
         outputs = outputs[_indices]
         h_n = h_n[:,_indices,:]
-        h_n = h_n.view(self.num_layers, self.num_directions, inputs.size(0), self.hidden_size)
-        outputs = outputs.view(outputs.size(0), outputs.size(1), self.num_directions, self.hidden_size)
-        if not concat_output:
-            h_n = torch.mean(h_n, 1)
-            outputs = torch.mean(outputs, 2)
+        # from SEASS
+        #forward_last = h_n[0] # of last or 1st layer?
+        #backward_last = h_n[1]
+
+        #h_n = h_n.view(self.num_layers, self.num_directions, inputs.size(0), self.hidden_size)
+        #outputs = outputs.view(outputs.size(0), outputs.size(1), self.num_directions, self.hidden_size)
+        #if not concat_output:
+        #    h_n = torch.mean(h_n, 1)
+        #    outputs = torch.mean(outputs, 2)
         return outputs, h_n
 
 

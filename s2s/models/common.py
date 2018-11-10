@@ -50,6 +50,163 @@ def sequence_mask(lengths, max_len=None):
             .lt(lengths.unsqueeze(1)))
 
 
+class MaxOut(nn.Module):
+    def __init__(self, pool_size):
+        super(MaxOut, self).__init__()
+        self.pool_size = pool_size
+        
+    def forward(self, input):
+        input_size = list(input.size())
+        assert input_size[-1] % self.pool_size == 0
+        output_size = [d for d in input_size]
+        output_size[-1] = output_size[-1] // self.pool_size
+        output_size.append(self.pool_size)
+        last_dim = len(output_size) - 1
+        input = input.view(*output_size)
+        input, idx = input.max(last_dim, keepdim=True)
+        output = input.squeeze(last_dim)
+
+        return output
+
+
+class ScoreLayer(nn.Module):
+    def __init__(self, 
+            vocab_size,
+            enc_size,
+            dec_size,
+            embed_size,
+            score_type='readout',
+            dropout=0.3):
+        super().__init__()
+        self.vocab_size = vocab_size
+        self.enc_size = enc_size
+        self.dec_size = dec_size
+        self.embed_size = embed_size
+        self.score_type = score_type
+
+        if self.score_type == 'readout':
+            self.readout = nn.Linear(enc_size+dec_size+embed_size, dec_size)
+            self.maxout = MaxOut(pool_size=2)
+            self.W = nn.Linear(dec_size//2, vocab_size)
+            
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, output, context, embed):
+        if self.score_type == 'readout':
+            readout = self.readout(torch.cat((output, context, embed), -1))
+            maxout = self.maxout(readout)
+            maxout = self.dropout(maxout)
+            logit = self.W(maxout)
+
+        return logit
+
+
+class Attention(nn.Module):
+    def __init__(self, 
+            value_dim, 
+            query_dim, 
+            attn_type, 
+            attn_dim):
+        super().__init__()
+        self.value_dim = value_dim
+        self.query_dim = query_dim
+        self.attn_type = attn_type
+        self.attn_dim = attn_dim
+
+        if self.attn_type == 'symmetric':
+            assert query_dim == value_dim
+            self.D = nn.Linear(value_dim, attn_dim, bias=False)
+            self.U = nn.Linear(attn_dim, attn_dim, bias=False)
+        elif self.attn_type == 'concat':
+            self.Wh = nn.Linear(value_dim, attn_dim, bias=True) 
+            self.Ws = nn.Linear(query_dim, attn_dim, bias=False) 
+            self.v = nn.Linear(attn_dim, 1, bias=False)
+        elif self.attn_type == 'bilinear':
+            self.W = nn.Linear(query_dim, value_dim, bias=False)
+
+
+    def forward(self, output, context, mask):
+        """
+        output: batch x dim
+        context: batch x src_len x dim
+        lengths: batch x src_len
+        """
+
+        if self.attn_type == 'symmetric':
+            output_ = F.relu(self.D(output)).unsqueeze(1)
+            context_ = F.relu(self.D(context))
+            scores = torch.bmm(output_, context_.transpose(1,2)) # batch_size, 1, src_len
+            scores = scores.masked_fill(mask == 0, -1e9)
+            p_attn = F.softmax(scores, -1) # batch x 1 x src_len
+            weighted = torch.bmm(p_attn, context).squeeze(1)
+        elif self.attn_type == 'concat':
+            context_ = self.Wh(context)
+            output_ = self.Ws(output).unsqueeze(1).expand_as(context_)
+            tmp = torch.tanh(context_ + output_) # batch x src_len x d
+            scores = self.v(tmp).transpose(1,2)  # batch x 1 x src_len
+            scores = scores.masked_fill(mask == 0, -1e9)
+            p_attn = F.softmax(scores, -1)
+            weighted = torch.bmm(p_attn, context).squeeze(1)
+        elif self.attn_type == 'bilinear':
+            tmp = self.W(context)
+            scores = torch.matmul(output.unsqueeze(1), tmp.transpose(1,2))
+            scores = scores.masked_fill(mask == 0, -1e9)
+            p_attn = F.softmax(scores, -1)
+            weighted = torch.bmm(p_attn, context).suqeeze(1)
+        return weighted, p_attn
+
+
+
+class StackedGRU(nn.Module):
+    def __init__(self, input_size, hidden_size, num_layers, dropout):
+        super(StackedGRU, self).__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.num_layers = num_layers
+        self.layers = nn.ModuleList()
+
+        
+        for i in range(num_layers):
+            self.layers.append(nn.GRUCell(input_size, hidden_size))
+            input_size = hidden_size
+
+    def forward(self, input, hidden):
+        """
+        input: batch x input_size
+        hidden: batch x hidden_size
+        """
+        h_0 = hidden
+        h_1 = []
+        for i, layer in enumerate(self.layers):
+            h_1_i = layer(input, h_0[i])
+            input = h_1_i
+            if i + 1 != self.num_layers:
+                input = self.dropout(input)
+            h_1 += [h_1_i]
+
+        h_1 = torch.stack(h_1)
+
+        return input, h_1
+
+
+class DecInit(nn.Module):
+    """
+    Convert encoder hidden states into decoder initial 
+    hidden states
+    """
+    def __init__(self, enc_hidden_size, dec_hidden_size, bidirectional=False):
+        super(DecInit, self).__init__()
+        self.enc_hidden_size = enc_hidden_size
+        self.dec_hidden_size = dec_hidden_size
+        self.bidirectional = bidirectional
+        self.initer = nn.Linear(self.enc_hidden_size, self.dec_hidden_size)
+        self.tanh = nn.Tanh()
+
+    def forward(self, enc_hidden):
+        """
+        enc_hidden: batch_size x hidden_size
+        """
+        return self.tanh(self.initer(enc_hidden))
+
 
 class Embedding(nn.Module):
 
@@ -210,7 +367,7 @@ class ResidualBlock(nn.Module):
         return self.layernorm(x[0] + self.dropout(self.layer(*x, padding=padding)))
 
 
-class Attention(nn.Module):
+class Attention2(nn.Module):
 
     def __init__(self, d_key, dropout_ratio, causal):
         super().__init__()
@@ -232,7 +389,7 @@ class MultiHead(nn.Module):
 
     def __init__(self, d_key, d_value, n_heads, dropout_ratio, causal=False):
         super().__init__()
-        self.attention = Attention(d_key, dropout_ratio, causal=causal)
+        self.attention = Attention2(d_key, dropout_ratio, causal=causal)
         self.wq = Linear(d_key, d_key, bias=False)
         self.wk = Linear(d_key, d_key, bias=False)
         self.wv = Linear(d_value, d_value, bias=False)

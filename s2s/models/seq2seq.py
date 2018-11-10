@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from s2s.models.common import Embedding
+from s2s.models.common import Embedding, DecInit
 from s2s.models.encoder import RNNEncoder, SelfFusionEncoder
 from s2s.models.decoder import RNNDecoder, AttnRNNDecoder
 
@@ -31,7 +31,8 @@ class Seq2seq(nn.Module):
         else:
             pretrained = None
         if restore is not None:
-            pretrained = None 
+            pretrained = None
+
         encoder_embed = Embedding(
                 cf.embed_size,
                 src_vocab,
@@ -62,9 +63,14 @@ class Seq2seq(nn.Module):
                 cf.mlp_dropout,
                 cf.attn_type)
 
-        self.num_directions = 2 if cf.bidirectional else 1
+        self.dec_initer = DecInit(cf.hidden_size, cf.hidden_size)
 
-        self.params = list(self.encoder.parameters()) +  list(self.decoder.parameters())
+        #self.num_directions = 2 if cf.bidirectional else 1
+        print('params')
+        for name, param in self.named_parameters():
+            print(name, param.size())
+
+        self.params = list(self.parameters()) #list(self.encoder.parameters()) +  list(self.decoder.parameters())
         self.optimizer = getattr(torch.optim, cf.optimizer)(self.params, **cf.optimizer_kwargs)
         
         self.loss = nn.CrossEntropyLoss(reduction='elementwise_mean', ignore_index=dc.pad_idx)
@@ -73,7 +79,8 @@ class Seq2seq(nn.Module):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
         src_output, src_last = self.encoder(src, len_src)
-        logits = self.decoder(tgt_in, len_tgt, src_last, src_output, len_src)
+        dec_init = self.dec_initer(src_last[1]).unsqueeze(0) # last back hidden
+        logits = self.decoder(tgt_in, len_tgt, dec_init, src_output, len_src)
         return logits
 
     def train_step(self, batch):
@@ -96,7 +103,8 @@ class Seq2seq(nn.Module):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, len_tgt = batch['tgt_in'],  batch['len_tgt']
         src_outputs, src_last = self.encoder(src, len_src)
-        preds = self.decoder.greedy_decode(src_last, self.sos_idx, self.eos_idx, src_outputs, len_src)
+        dec_init = self.dec_initer(src_last[1]).unsqueeze(0) # last back hidden
+        preds = self.decoder.greedy_decode(dec_init, self.sos_idx, self.eos_idx, src_outputs, len_src)
         return preds
 
  

@@ -44,14 +44,14 @@ class Vanilla(Config):
     def __init__(self, raw_root, data_root, model_path, dataset):
         super().__init__(raw_root, data_root, model_path, dataset)
         self.model = 'Seq2seq'
-        self.hidden_size = 256
+        self.hidden_size = 512
         self.num_layers = 1
-        self.embed_size = 128
+        self.embed_size = 300
         self.bidirectional = True
         self.embed_dropout = 0.0
-        self.rnn_dropout = 0.0
-        self.mlp_dropout = 0.0
-        self.attn_type = 'symmetric'
+        self.rnn_dropout = 0.5
+        self.mlp_dropout = 0.5
+        self.attn_type = 'concat'
         # embedding
         self.pretrained = None #'glove.6B.300d.txt'
         self.pretrained_size = None #300
