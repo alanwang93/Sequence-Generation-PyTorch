@@ -101,7 +101,7 @@ def init_weights_by_type(m):
 def init_weights(param, name=None):
     dim = param.dim()
     if dim == 1:
-        param.normal_(0, math.sqrt(6 / (1 + p.size(0))))
+        param.normal_(0, math.sqrt(6 / (1 + param.size(0))))
     elif dim == 2:
         param = init.xavier_normal_(param, gain=1.)
     else:
