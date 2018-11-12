@@ -84,7 +84,7 @@ class VanillaMedium(Config):
         self.embed_dropout = 0.0
         self.rnn_dropout = 0.0
         self.mlp_dropout = 0.2
-        self.attn_type = 'symmetric'
+        self.attn_type = 'concat'
         # embedding
         self.pretrained = None #'glove.6B.300d.txt'
         self.pretrained_size = None #300

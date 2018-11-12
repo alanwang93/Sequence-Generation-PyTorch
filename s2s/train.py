@@ -111,7 +111,7 @@ def train(args):
         restart = False
     else:
         for name, param in model.named_parameters():
-            init_weight(param, name)
+            init_weights(param, name)
         step = 0
         best_dev_metric = cf.init_metric
         best_test_metric = cf.init_metric

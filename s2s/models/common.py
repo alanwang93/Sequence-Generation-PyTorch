@@ -114,7 +114,8 @@ class Attention(nn.Module):
         self.attn_dim = attn_dim
 
         if self.attn_type == 'symmetric':
-            assert query_dim == value_dim
+            #assert query_dim == value_dim
+            self.q2v = nn.Linear(query_dim, value_dim)
             self.D = nn.Linear(value_dim, attn_dim, bias=False)
             self.U = nn.Linear(attn_dim, attn_dim, bias=False)
         elif self.attn_type == 'concat':
@@ -133,6 +134,7 @@ class Attention(nn.Module):
         """
 
         if self.attn_type == 'symmetric':
+            output = self.q2v(output)
             output_ = F.relu(self.D(output)).unsqueeze(1)
             context_ = F.relu(self.D(context))
             scores = torch.bmm(output_, context_.transpose(1,2)) # batch_size, 1, src_len

@@ -103,7 +103,7 @@ def init_weights(param, name=None):
     if dim == 1:
         param.normal_(0, math.sqrt(6 / (1 + p.size(0))))
     elif dim == 2:
-        param.xavier_normal_(gain=1.)
+        param = init.xavier_normal_(param, gain=1.)
     else:
         raise ValueError('Wrong dimension: {0}'.format(dim))
     print('Initialize {0}'.format(None))
