@@ -9,7 +9,7 @@ class Config:
         self.data_root = data_root
         self.model_path = model_path
         self.dataset = getattr(datasets, dataset)(raw_root, data_root)
-        self.batch_size = 16
+        self.batch_size = 64
         self.max_step = 100000
 
         self.optimizer = 'Adam'
@@ -25,14 +25,14 @@ class Config:
         self.eval_freq = 2000
 
         # validation
-        self.metric = 'loss'
-        self.init_metric = float('inf')
+        self.metric = 'ROUGE-2'
+        self.init_metric = 0.
 
         # pretrained embedding
         # stored in raw_root/embeddings/...
         self.pretrained = None #'glove.6B.300d.txt'
 
-
+        self.scheduler_mode = 'max'
     def is_better(self, cur, best):
         if cur < best:
             return True
@@ -45,18 +45,18 @@ class Vanilla(Config):
         super().__init__(raw_root, data_root, model_path, dataset)
         self.model = 'Seq2seq'
         self.hidden_size = 512
-        self.num_layers = 1
+        self.enc_num_layers = 1
+        self.dec_num_layers = 1
         self.embed_size = 300
         self.bidirectional = True
         self.embed_dropout = 0.0
         self.rnn_dropout = 0.5
         self.mlp_dropout = 0.5
-        self.attn_type = 'concat'
+        self.attn_type = 'symmetric'
         # embedding
         self.pretrained = None #'glove.6B.300d.txt'
         self.pretrained_size = None #300
         self.projection = None
-        #self.clf_coef = 3.
 
         self.optimizer = 'Adam'
         self.optimizer_kwargs = dict(
@@ -65,6 +65,7 @@ class Vanilla(Config):
                 eps=1e-08, 
                 weight_decay=0)
         self.clip_norm = 5.
+        self.patience = 12 # halve lr if dev metric doesn't improve for n steps
 
         # log
         self.log_freq = 100

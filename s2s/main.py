@@ -26,6 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('--params', type=str, default=None)
     
     parser.add_argument('--cuda', type=int, default=None)
+    parser.add_argument('--cuda_seed', type=int, default=12345)
     
     parser.add_argument('--vocab', dest='vocab', action='store_true')
     parser.add_argument('--rebuild', dest='rebuild', action='store_true', \

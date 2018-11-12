@@ -4,8 +4,11 @@
 import os
 import logging
 import sys
+import math
 
 from rouge import Rouge
+import torch.nn as nn
+import torch.nn.init as init
 
 def update_config(config, params):
     """
@@ -21,7 +24,7 @@ def update_config(config, params):
         if hasattr(config, param):
             setattr(config, param, type(getattr(config, param))(value))
         else:
-            raise AttributeError()
+            raise ValueError()
 
 def init_logging(log_name):
     """
@@ -63,3 +66,49 @@ def compute_metrics(hyps, refs, names, avg=True):
     if 'rouge' in names:
         metrics.update(rouge_score(hyps, refs))
     return metrics
+
+
+def init_weights_by_type(m):
+    """
+    Specially initialization for RNNs, etc.
+    """
+    print('Initialze', m, )
+    if type(m) == nn.GRU:
+        for i in range(m.num_layers):
+            K = 3
+            func = nn.init.orthogonal_
+            for k in range(K):
+                s = k * m.hidden_size
+                e = (k+1) * m.hidden_size
+                w = getattr(m, 'weight_ih_l{0}'.format(i))[s:e]
+                func(w)
+                w = getattr(m, 'weight_hh_l{0}'.format(i))[s:e]
+                func(w)
+                if m.bidirectional:
+                    w = getattr(m, 'weight_ih_l{0}_reverse'.format(i))[s:e]
+                    func(w)
+                    w = getattr(m, 'weight_hh_l{0}_reverse'.format(i))[s:e]
+                    func(w)
+
+    elif type(m) == nn.GRUCell:
+        pass
+    elif type(m) == nn.Linear:
+        pass
+    else:
+        raise ValueError('Module type not recgnized: {0}'.format(type(m)))
+
+
+def init_weights(param, name=None):
+    dim = param.dim()
+    if dim == 1:
+        param.normal_(0, math.sqrt(6 / (1 + p.size(0))))
+    elif dim == 2:
+        param.xavier_normal_(gain=1.)
+    else:
+        raise ValueError('Wrong dimension: {0}'.format(dim))
+    print('Initialize {0}'.format(None))
+    
+
+
+
+

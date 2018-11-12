@@ -50,14 +50,14 @@ class Seq2seq(nn.Module):
 
         self.encoder = RNNEncoder(
                 cf.hidden_size,
-                cf.num_layers,
+                cf.enc_num_layers,
                 encoder_embed,
                 cf.bidirectional,
                 cf.rnn_dropout)
 
         self.decoder = AttnRNNDecoder(
                 cf.hidden_size,
-                cf.num_layers,
+                cf.dec_num_layers,
                 decoder_embed,
                 cf.rnn_dropout,
                 cf.mlp_dropout,
@@ -66,12 +66,15 @@ class Seq2seq(nn.Module):
         self.dec_initer = DecInit(cf.hidden_size, cf.hidden_size)
 
         #self.num_directions = 2 if cf.bidirectional else 1
-        print('params')
-        for name, param in self.named_parameters():
-            print(name, param.size())
 
         self.params = list(self.parameters()) #list(self.encoder.parameters()) +  list(self.decoder.parameters())
         self.optimizer = getattr(torch.optim, cf.optimizer)(self.params, **cf.optimizer_kwargs)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                self.optimizer, 
+                cf.scheduler_mode,
+                factor=0.5,
+                patience=cf.patience,
+                verbose=True)
         
         self.loss = nn.CrossEntropyLoss(reduction='elementwise_mean', ignore_index=dc.pad_idx)
 
@@ -159,7 +162,13 @@ class SelfFusionSeq2seq(nn.Module):
 
         self.params = list(self.encoder.parameters()) +  list(self.decoder.parameters())
         self.optimizer = getattr(torch.optim, cf.optimizer)(self.params, **cf.optimizer_kwargs)
-        
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                self.optimizer, 
+                cf.scheduler_mode,
+                factor=0.5,
+                patience=cf.patience,
+                verbose=True)
+       
         self.loss = nn.CrossEntropyLoss(reduction='elementwise_mean', ignore_index=dc.pad_idx)
 
     def forward(self, batch):

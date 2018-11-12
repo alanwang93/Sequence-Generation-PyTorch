@@ -170,7 +170,13 @@ class MTSeq2seq(nn.Module):
         self.params = list(self.encoder.parameters()) +  list(self.decoder.parameters())\
                 +list(self.clf_encoder.parameters())
         self.optimizer = getattr(torch.optim, cf.optimizer)(self.params, **cf.optimizer_kwargs)
-        
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                self.optimizer, 
+                cf.scheduler_mode,
+                factor=0.5,
+                patience=cf.patience,
+                verbose=True)
+       
         self.loss = nn.CrossEntropyLoss(reduction='elementwise_mean', ignore_index=dc.pad_idx)
 
     def forward(self, batch):
@@ -279,7 +285,13 @@ class MTSeq2seqExt(nn.Module):
         self.params = list(self.encoder.parameters()) +  list(self.decoder.parameters())\
                 +list(self.clf_encoder.parameters())
         self.optimizer = getattr(torch.optim, cf.optimizer)(self.params, **cf.optimizer_kwargs)
-        
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                self.optimizer, 
+                cf.scheduler_mode,
+                factor=0.5,
+                patience=cf.patience,
+                verbose=True)
+       
         self.loss = nn.CrossEntropyLoss(reduction='elementwise_mean', ignore_index=dc.pad_idx)
 
     def forward(self, batch):

@@ -15,7 +15,7 @@ import s2s.models as models
 from s2s.utils.dataloader import build_dataloaders
 import s2s.utils.dataloader as dataloader
 from s2s.utils.vocab import Vocab
-from s2s.utils.utils import update_config, init_logging, to, compute_metrics
+from s2s.utils.utils import update_config, init_logging, to, compute_metrics, init_weights
 from s2s.utils.summary import Summary
 
 def train(args):
@@ -41,11 +41,13 @@ def train(args):
     if args.params is not None:
         # update config
         update_config(config=cf, params=args.params)
+
     # save config
     pickle.dump(cf, open(config_path, 'wb'))
     logger.info('Config name: {0}\n{1}'.format(args.config, pprint.pformat(vars(cf), 2)))
     dc = cf.dataset
     logger.info('Data config: \n{0}'.format(pprint.pformat(vars(dc), 2)))
+
 
     if args.cuda is None:
         device = torch.device('cpu')
@@ -74,16 +76,32 @@ def train(args):
     train, dev, test = dataloader_builder(cf, src_vocab, tgt_vocab, args.rebuild)
     n_train, n_dev, n_test = map(len, [train, dev, test])
     logger.info('Dataset sizes: train {0}, dev {1}, test {2}'.format(n_train, n_dev, n_test))
+    
+    # load raw data for evaluation
+    dev_refs = []
+    with open(os.path.join(dc.raw, dc.dev_prefix + '.' + dc.tgt)) as f:
+        for line in f:
+            line = line.lower().strip() if dc.lower else line.strip()
+            dev_refs.append(line)
+    test_refs = []
+    with open(os.path.join(dc.raw, dc.test_prefix + '.' + dc.tgt)) as f:
+        for line in f:
+            line = line.lower().strip() if dc.lower else line.strip()
+            test_refs.append(line)
+
 
     # model
     model = getattr(models, cf.model)(cf, src_vocab, tgt_vocab, args.restore)
     model = model.to(device)
-    #optimizer = getattr(torch.optim , cf.optimizer)(model.parameters(), **cf.optimizer_kwargs)
+
+    logger.info('Parameters')
+    for name, param in model.named_parameters():
+        logger.info('{0}, size: {1}'.format(name, param.size()))
+
 
     # restore checkpoints
     if args.restore is not None:
         checkpoint = torch.load(args.restore)
-
         model.load_state_dict(checkpoint['state_dict'])
         model.optimizer.load_state_dict(checkpoint['optimizer_state'])
         step = checkpoint['step']
@@ -92,6 +110,8 @@ def train(args):
         best_step = checkpoint['best_step']
         restart = False
     else:
+        for name, param in model.named_parameters():
+            init_weight(param, name)
         step = 0
         best_dev_metric = cf.init_metric
         best_test_metric = cf.init_metric
@@ -139,19 +159,19 @@ def train(args):
                 dev_loss = 0
                 n_dev_batch = 0
                 model.eval()
-                dev_hyps, dev_refs = [], []
+                dev_hyps  = []
                 for dev_batch in dev:
                     dev_batch = to(dev_batch, device)
                     dev_loss_, n_dev_batch_ = model.get_loss(dev_batch)
                     dev_loss += dev_loss_*n_dev_batch_
                     n_dev_batch += n_dev_batch_
                     preds = model.greedy_decode(dev_batch)
-                    for ref, hyp in zip(dev_batch['tgt_in'], preds):
-                        ref = ' '.join(tgt_vocab.tos(ref))
+                    for hyp in preds:
+                        #ref = ' '.join(tgt_vocab.tos(ref))
                         hyp = ' '.join(tgt_vocab.tos(hyp))
                         if hyp == '':
                             hyp = ' '
-                        dev_refs.append(ref)
+                        #dev_refs.append(ref)
                         dev_hyps.append(hyp)
                 dev_loss /= n_dev_batch
                 
@@ -160,6 +180,7 @@ def train(args):
                 names = ['rouge']
                 dev_metrics.update(compute_metrics(dev_hyps, dev_refs, names))
                 dev_summ.write(step, dev_metrics)
+                
 
                 logger.info('[Dev] Step {0}, Loss: {1:.5f}'.format(step, dev_loss))
                 for k, v in dev_metrics.items():
@@ -172,19 +193,17 @@ def train(args):
                 test_loss = 0
                 n_test_batch = 0
                 model.eval()
-                test_hyps, test_refs = [], []
+                test_hyps = []
                 for test_batch in test:
                     test_batch = to(test_batch, device)
                     test_loss_, n_test_batch_ = model.get_loss(test_batch)
                     test_loss += test_loss_*n_test_batch_
                     n_test_batch += n_test_batch_
                     preds = model.greedy_decode(test_batch)
-                    for ref, hyp in zip(test_batch['tgt_in'], preds):
-                        ref = ' '.join(tgt_vocab.tos(ref))
+                    for hyp in preds:
                         hyp = ' '.join(tgt_vocab.tos(hyp))
                         if hyp == '':
                             hyp = ' '
-                        test_refs.append(ref)
                         test_hyps.append(hyp)
                 test_loss /= n_test_batch
                 
@@ -197,16 +216,25 @@ def train(args):
                 logger.info('[Test] Step {0}, Loss: {1:.5f}'\
                         .format(step, test_loss))
                 for k, v in test_metrics.items():
-                    logger.info('[Test]\t{0}: {1:.5f}'.format(k, v))
+                    logger.info('[Test] {0}: {1:.5f}'.format(k, v))
 
 
+                model.scheduler.step(dev_metrics[cf.metric])
+                print(model.optimizer)
                 if cf.is_better(dev_metrics[cf.metric], best_dev_metric):
                     best_step = step
                     best_dev_metric = dev_metrics[cf.metric]
                     best_test_metric = test_metrics[cf.metric]
                     for name in dev_metrics:
                         best_metrics['dev_' + name] = dev_metrics[name]
+                    for name in dev_metrics:
+                        best_metrics['test_' + name] = test_metrics[name]
+
                     best_summ.write(best_step, best_metrics)
+                    logger.info('[Best] Step {0}, new best'.format(step))
+                    for k, v in test_metrics.items():
+                        logger.info('[Best] {0}: {1:.5f}'.format(k, v))
+
 
                     checkpoint = dict(
                             state_dict=model.state_dict(),
@@ -225,10 +253,9 @@ def train(args):
                 best_metrics['test_' + cf.metric] = best_test_metric
 
                 # best up to now
-                best_str = '[Dev] Best up to now:\nstep:{0}\n'.format(best_step)
+                logger.info('[Best] Up to now, Best step: {0}'.format(best_step))
                 for k in best_metrics:
-                    best_str += '{0}:\t{1}\n'.format(k, best_metrics[k])
-                logger.info(best_str)
+                    logger.info('[Best] {0}: {1:5f}'.format(k, best_metrics[k]))
 
                 dev_loss = 0
                 n_dev_batch = 0

@@ -138,7 +138,7 @@ class Gigaword(DataConfig):
 
         self.unk_token = '<unk>'
 
-class BiClfGigaword(DataConfig):
+class MTGigaword(DataConfig):
     """
     use `train_biclf.py`
     """
@@ -148,7 +148,7 @@ class BiClfGigaword(DataConfig):
         
         self.name = 'BiClfGigawords'
         self.raw = os.path.join(self.raw_root, 'giga')
-        self.path = os.path.join(self.data_root, 'biclf_giga')
+        self.path = os.path.join(self.data_root, 'mt_giga')
 
         self.train_prefix = 'train'
         self.dev_prefix = 'dev'
@@ -156,7 +156,7 @@ class BiClfGigaword(DataConfig):
         
         # sentence
         self.max_src_len = 120
-        self.max_tgt_len = 50
+        self.max_tgt_len = 30
         self.src_out = True
         
         # Vocabulary
