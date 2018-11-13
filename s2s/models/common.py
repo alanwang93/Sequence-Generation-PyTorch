@@ -179,7 +179,10 @@ class StackedGRU(nn.Module):
         h_0 = hidden
         h_1 = []
         for i, layer in enumerate(self.layers):
-            h_1_i = layer(input, h_0[i])
+            if h_0 is None:
+                h_1_i = layer(input, h_0)
+            else:
+                h_1_i = layer(input, h_0[i])
             input = h_1_i
             if i + 1 != self.num_layers:
                 input = self.dropout(input)

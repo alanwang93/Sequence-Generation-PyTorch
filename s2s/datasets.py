@@ -146,7 +146,7 @@ class MTGigaword(DataConfig):
     def __init__(self, raw_root, data_root):
         super().__init__(raw_root, data_root)
         
-        self.name = 'BiClfGigawords'
+        self.name = 'MTGigawords'
         self.raw = os.path.join(self.raw_root, 'giga')
         self.path = os.path.join(self.data_root, 'mt_giga')
 
@@ -166,7 +166,7 @@ class MTGigaword(DataConfig):
         self.min_freq = 0
         self.lower = True
 
-        self.dataloader = 'build_dataloaders_biclf'
+        self.dataloader = 'build_dataloaders_mt'
 
         self.unk_token = '<unk>'
 
@@ -191,7 +191,7 @@ class MTGigawordSmall(DataConfig):
         # sentence
         self.max_src_len = 120
         self.max_tgt_len = 30
-        self.src_out = False
+        self.src_out = True
         
         # Vocabulary
         self.share_vocab = False
@@ -199,7 +199,7 @@ class MTGigawordSmall(DataConfig):
         self.max_tgt_vocab = 100000
         self.min_freq = 3
         self.lower = True
-        self.dataloader = 'build_dataloaders_biclf'
+        self.dataloader = 'build_dataloaders_mt'
 
         self.unk_token = '<unk>'
 

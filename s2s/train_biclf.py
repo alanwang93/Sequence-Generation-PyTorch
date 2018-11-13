@@ -12,7 +12,7 @@ import numpy as np
 
 import s2s.config as config
 import s2s.models as models
-from s2s.utils.dataloader import build_dataloaders, build_dataloaders_biclf
+from s2s.utils.dataloader import build_dataloaders, build_dataloaders_mt
 from s2s.utils.vocab import Vocab
 from s2s.utils.utils import update_config, init_logging, to, compute_metrics
 from s2s.utils.summary import Summary

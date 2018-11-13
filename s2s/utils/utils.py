@@ -16,6 +16,13 @@ def update_config(config, params):
     """
     params = params.split(' ')
     assert len(params) % 2 == 0
+    #config.enc_num_layers = 1
+    #config.dec_num_layers = 1
+    #def is_better(self, cur, best):
+    #    if cur > best:
+    #        return True
+    #    return False
+    #config.is_better = is_better
 
     for i in range(len(params)//2):
         param = params[2*i]
@@ -101,12 +108,12 @@ def init_weights_by_type(m):
 def init_weights(param, name=None):
     dim = param.dim()
     if dim == 1:
-        param.normal_(0, math.sqrt(6 / (1 + param.size(0))))
+        param = init.normal_(param, 0, math.sqrt(6 / (1 + param.size(0))))
     elif dim == 2:
         param = init.xavier_normal_(param, gain=1.)
     else:
         raise ValueError('Wrong dimension: {0}'.format(dim))
-    print('Initialize {0}'.format(None))
+    print('Initialize {0}'.format(name))
     
 
 

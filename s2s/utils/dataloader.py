@@ -171,7 +171,7 @@ def build_dataloaders(
     return train, dev, test
 
 
-def build_dataloaders_biclf(
+def build_dataloaders_mt(
         config, 
         src_vocab, 
         tgt_vocab, 
@@ -189,6 +189,7 @@ def build_dataloaders_biclf(
     dc = config.dataset # data config
     max_len_src = dc.max_len_src
     max_len_tgt = dc.max_len_tgt
+    num_pos = num_neg = 0
     dataloaders = []
     for prefix in [dc.train_prefix,
                    dc.dev_prefix,
@@ -213,6 +214,8 @@ def build_dataloaders_biclf(
             all_tgt = tgt_data['tgt']
             all_len_tgt = tgt_data['len_tgt']
             all_src_out = src_data['src_out']
+            #unique, counts = np.unique(all_src_out, return_counts=True)
+            #print(unique, counts)
             print('Loading takes {0:.3f} s'.format(time.time()-start))
         else:
             print('Building dataloaders...')
@@ -245,8 +248,10 @@ def build_dataloaders_biclf(
                     for i in range(len_src):
                         if str_src[i] in str_tgt:
                             src_out[i] = 1
+                            num_pos += 1
                         else:
                             src_out[i] = 2
+                            num_neg += 1
 
                     all_len_src.append(len_src)
                     all_len_tgt.append(len_tgt)
@@ -299,6 +304,8 @@ def build_dataloaders_biclf(
         dataloaders.append(dataloader)
     
     train, dev, test = dataloaders
+    print('pos:', num_pos)
+    print('neg:', num_neg)
     
     return train, dev, test
 

@@ -19,6 +19,9 @@ from s2s.utils.utils import update_config, init_logging, to, compute_metrics, in
 from s2s.utils.summary import Summary
 
 def train(args):
+    """
+    Multi-task training
+    """
 
     model_path = os.path.join(args.model_root, args.config+'_'+args.dataset, args.suffix)
     if not os.path.exists(model_path):
@@ -128,6 +131,7 @@ def train(args):
     train_loss = 0
     n_train_batch = 0
     best_metrics = dict()
+    train_mt_loss = 0
     
     for _ in itertools.count():
         for i, train_batch in enumerate(train):
@@ -135,35 +139,42 @@ def train(args):
             # train
             model.train()
             train_batch = to(train_batch, device)
-            train_loss_, n_train_batch_ = model.train_step(train_batch)
+            train_loss_, train_mt_loss_, n_train_batch_ = model.train_step(train_batch)
             train_loss += train_loss_*n_train_batch_
+            train_mt_loss += train_mt_loss_*n_train_batch_
             n_train_batch += n_train_batch_
             step += 1
             epoch = step//n_train
 
-
             if step % cf.log_freq == 0:
 
                 train_loss /= n_train_batch
+                train_mt_loss /= n_train_batch
                 # train summary
-                train_metrics = {'loss':train_loss}
+                train_metrics = {
+                        'loss':train_loss,
+                        'mt_loss': train_mt_loss }
                 train_summ.write(step, train_metrics)
-                logger.info('[Train] Step {0}, Loss: {1:.5f}'.format(step, train_loss))
+                logger.info('[Train] Step {0}, Loss: {1:.5f}, MT loss: {2:.5f}'.\
+                        format(step, train_loss, train_mt_loss))
 
                 train_loss = 0
+                train_mt_loss = 0
                 n_train_batch = 0
 
 
             # eval on dev set
             if step % cf.eval_freq == 0:
                 dev_loss = 0
+                dev_mt_loss = 0
                 n_dev_batch = 0
                 model.eval()
                 dev_hyps  = []
                 for dev_batch in dev:
                     dev_batch = to(dev_batch, device)
-                    dev_loss_, n_dev_batch_ = model.get_loss(dev_batch)
+                    dev_loss_, dev_mt_loss_, n_dev_batch_ = model.get_loss(dev_batch)
                     dev_loss += dev_loss_*n_dev_batch_
+                    dev_mt_loss += dev_mt_loss_*n_dev_batch_
                     n_dev_batch += n_dev_batch_
                     preds = model.greedy_decode(dev_batch)
                     for hyp in preds:
@@ -173,16 +184,21 @@ def train(args):
                             hyp = ' '
                         #dev_refs.append(ref)
                         dev_hyps.append(hyp)
+
                 dev_loss /= n_dev_batch
+                dev_mt_loss /= n_dev_batch
                 
                 # dev summary
-                dev_metrics = {'loss':dev_loss}
+                dev_metrics = {
+                        'loss':dev_loss,
+                        'mt_loss': dev_mt_loss}
                 names = ['rouge']
                 dev_metrics.update(compute_metrics(dev_hyps, dev_refs, names))
                 dev_summ.write(step, dev_metrics)
                 
 
-                logger.info('[Dev] Step {0}, Loss: {1:.5f}'.format(step, dev_loss))
+                logger.info('[Dev] Step {0}, Loss: {1:.5f}, MT loss: {2:.5f}'.\
+                        format(step, dev_loss, dev_mt_loss))
                 for k, v in dev_metrics.items():
                     logger.info('[Dev]\t{0}: {1:.5f}'.format(k, v))
 
@@ -191,13 +207,15 @@ def train(args):
 
                 # eval on test set
                 test_loss = 0
+                test_mt_loss = 0
                 n_test_batch = 0
                 model.eval()
                 test_hyps = []
                 for test_batch in test:
                     test_batch = to(test_batch, device)
-                    test_loss_, n_test_batch_ = model.get_loss(test_batch)
+                    test_loss_, test_mt_loss_, n_test_batch_ = model.get_loss(test_batch)
                     test_loss += test_loss_*n_test_batch_
+                    test_mt_loss += test_mt_loss_*n_test_batch_
                     n_test_batch += n_test_batch_
                     preds = model.greedy_decode(test_batch)
                     for hyp in preds:
@@ -206,21 +224,24 @@ def train(args):
                             hyp = ' '
                         test_hyps.append(hyp)
                 test_loss /= n_test_batch
+                test_mt_loss /= n_test_batch
                 
                 # test summary
-                test_metrics = {'loss':test_loss}
+                test_metrics = {
+                        'loss':test_loss,
+                        'mt_loss': test_mt_loss }
                 names = ['rouge']
                 test_metrics.update(compute_metrics(test_hyps, test_refs, names))
                 test_summ.write(step, test_metrics)
 
-                logger.info('[Test] Step {0}, Loss: {1:.5f}'\
-                        .format(step, test_loss))
+                logger.info('[Test] Step {0}, Loss: {1:.5f}, MT loss: {2:.5f}'\
+                        .format(step, test_loss, test_mt_loss))
                 for k, v in test_metrics.items():
                     logger.info('[Test] {0}: {1:.5f}'.format(k, v))
 
 
                 model.scheduler.step(dev_metrics[cf.metric])
-                print(model.optimizer)
+                logger.info(model.optimizer)
                 if cf.is_better(dev_metrics[cf.metric], best_dev_metric):
                     best_step = step
                     best_dev_metric = dev_metrics[cf.metric]
