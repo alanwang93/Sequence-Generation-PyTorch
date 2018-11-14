@@ -286,7 +286,7 @@ def build_dataloaders_mt(
                     }
             examples.append(example)
 
-        if prefix in [dc.train_prefix, dc.dev_prefix]:
+        if prefix in [dc.train_prefix]:
             dataloader = data.DataLoader(
                 DictDataset(examples),
                 batch_size=cf.batch_size,

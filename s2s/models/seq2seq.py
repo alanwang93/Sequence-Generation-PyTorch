@@ -63,16 +63,17 @@ class GatedSeq2seq(nn.Module):
                 cf.mlp_dropout,
                 cf.attn_type)
 
-        self.dec_initer = DecInit(cf.hidden_size, cf.hidden_size)
-
-        #self.num_directions = 2 if cf.bidirectional else 1
+        self.dec_initer = DecInit(
+                cf.hidden_size, 
+                cf.hidden_size, 
+                bidirectional=cf.bidirectional)
 
         self.params = list(self.parameters()) #list(self.encoder.parameters()) +  list(self.decoder.parameters())
         self.optimizer = getattr(torch.optim, cf.optimizer)(self.params, **cf.optimizer_kwargs)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer, 
                 cf.scheduler_mode,
-                factor=0.5,
+                factor=cf.decay_factor,
                 patience=cf.patience,
                 verbose=True)
         
@@ -82,7 +83,7 @@ class GatedSeq2seq(nn.Module):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
         src_output, src_last = self.encoder(src, len_src)
-        dec_init = self.dec_initer(src_last[1]).unsqueeze(0) # last back hidden
+        dec_init = self.dec_initer(src_last)#.unsqueeze(0) # [1] last back hidden
         logits = self.decoder(tgt_in, len_tgt, dec_init, src_output, len_src)
         return logits
 
@@ -106,7 +107,7 @@ class GatedSeq2seq(nn.Module):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, len_tgt = batch['tgt_in'],  batch['len_tgt']
         src_outputs, src_last = self.encoder(src, len_src)
-        dec_init = self.dec_initer(src_last[1]).unsqueeze(0) # last back hidden
+        dec_init = self.dec_initer(src_last)#.unsqueeze(0)
         preds = self.decoder.greedy_decode(dec_init, self.sos_idx, self.eos_idx, src_outputs, len_src)
         return preds
 
@@ -159,9 +160,10 @@ class Seq2seq(nn.Module):
                 cf.mlp_dropout,
                 cf.attn_type)
 
-        self.dec_initer = DecInit(cf.hidden_size, cf.hidden_size)
-
-        #self.num_directions = 2 if cf.bidirectional else 1
+        self.dec_initer = DecInit(
+                cf.hidden_size, 
+                cf.hidden_size,
+                cf.bidirectional)
 
         self.params = list(self.parameters()) #list(self.encoder.parameters()) +  list(self.decoder.parameters())
         self.optimizer = getattr(torch.optim, cf.optimizer)(self.params, **cf.optimizer_kwargs)
@@ -178,7 +180,7 @@ class Seq2seq(nn.Module):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
         src_output, src_last = self.encoder(src, len_src)
-        dec_init = self.dec_initer(src_last[1]).unsqueeze(0) # last back hidden
+        dec_init = self.dec_initer(src_last)#.unsqueeze(0) # last back hidden
         logits = self.decoder(tgt_in, len_tgt, dec_init, src_output, len_src)
         return logits
 
@@ -202,7 +204,7 @@ class Seq2seq(nn.Module):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, len_tgt = batch['tgt_in'],  batch['len_tgt']
         src_outputs, src_last = self.encoder(src, len_src)
-        dec_init = self.dec_initer(src_last[1]).unsqueeze(0) # last back hidden
+        dec_init = self.dec_initer(src_last) #.unsqueeze(0) # last back hidden
         preds = self.decoder.greedy_decode(dec_init, self.sos_idx, self.eos_idx, src_outputs, len_src)
         return preds
 

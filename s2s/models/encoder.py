@@ -74,29 +74,6 @@ class RNNEncoder(Encoder):
                 dropout=rnn_dropout,
                 bidirectional=True)
 
-        #self.init_weights()
-
-    def init_weights(self):
-        # RNN
-        for i in range(self.num_layers):
-            if self.cell == 'gru':
-                K = 3
-            elif self.cell == 'lstm':
-                K = 4
-            for k in range(K):
-                s = k*self.hidden_size
-                e = (k+1)*self.hidden_size
-                w = getattr(self.rnn, 'weight_ih_l{0}'.format(i))[s:e]
-                nn.init.orthogonal_(w)
-                w = getattr(self.rnn, 'weight_hh_l{0}'.format(i))[s:e]
-                nn.init.orthogonal_(w)
-                if self.bidirectional:
-                    w = getattr(self.rnn, 'weight_ih_l{0}_reverse'.format(i))[s:e]
-                    nn.init.orthogonal_(w)
-                    w = getattr(self.rnn, 'weight_hh_l{0}_reverse'.format(i))[s:e]
-                    nn.init.orthogonal_(w)
-
-
     def forward(self, inputs, lengths, hidden=None, concat_output=True):
         """
         Return:

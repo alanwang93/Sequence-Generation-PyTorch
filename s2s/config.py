@@ -96,7 +96,8 @@ class Vanilla(Config):
                 eps=1e-08, 
                 weight_decay=0)
         self.clip_norm = 5.
-        self.patience = 5 # halve lr if dev metric doesn't improve for n steps
+        self.patience = 5 # decay lr if dev metric doesn't improve for n steps
+        self.decay_factor = 0.5
 
         # log
         self.log_freq = 100
@@ -170,25 +171,26 @@ class MTS2S(Config):
         self.eval_freq = 1000
 
 
-class MTS2SExt(Config):
+class GatedMTS2S(Config):
     
     def __init__(self, raw_root, data_root, model_path, dataset):
         super().__init__(raw_root, data_root, model_path, dataset)
-        self.model = 'MTSeq2seqExt'
-        self.hidden_size = 256
-        self.num_layers = 2
+        self.model = 'GatedMTSeq2seq'
+        self.hidden_size = 512
+        self.enc_num_layers = 1
+        self.dec_num_layers = 1
         self.embed_size = 300
         self.bidirectional = True
         self.embed_dropout = 0.0
-        self.rnn_dropout = 0.0
-        self.mlp_dropout = 0.2
+        self.rnn_dropout = 0.5
+        self.mlp_dropout = 0.5
         # embedding
-        self.pretrained = None #'glove.6B.300d.txt'
-        self.pretrained_size = None #300
+        self.pretrained = 'glove.6B.300d.txt'
+        self.pretrained_size = 300
         self.projection = False
-        self.clf_coef = 1.
+        self.mt_coef = 0.1
 
-        self.attn_type = 'symmetric'
+        self.attn_type = 'concat'
 
         self.optimizer = 'Adam'
         self.optimizer_kwargs = dict(
@@ -197,10 +199,12 @@ class MTS2SExt(Config):
                 eps=1e-08, 
                 weight_decay=0)
         self.clip_norm = 5.
-
+        self.patience = 5 # halve lr if dev metric doesn't improve for n steps
+        #self.decay_factor = 0.5
+        
         # log
         self.log_freq = 100
-        self.eval_freq = 500
+        self.eval_freq = 1000
 
 
 class SelfFusion_Gigaword(Config):

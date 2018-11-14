@@ -79,7 +79,7 @@ class ScoreLayer(nn.Module):
             dropout=0.3):
         super().__init__()
         self.vocab_size = vocab_size
-        self.enc_size = enc_size
+        self.enc_size = enc_size # or context size
         self.dec_size = dec_size
         self.embed_size = embed_size
         self.score_type = score_type
@@ -165,8 +165,6 @@ class StackedGRU(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.num_layers = num_layers
         self.layers = nn.ModuleList()
-
-        
         for i in range(num_layers):
             self.layers.append(nn.GRUCell(input_size, hidden_size))
             input_size = hidden_size
@@ -182,7 +180,8 @@ class StackedGRU(nn.Module):
             if h_0 is None:
                 h_1_i = layer(input, h_0)
             else:
-                h_1_i = layer(input, h_0[i])
+                # last hidden: num_layer*num_directions x batch x dim
+                h_1_i = layer(input, h_0[i]) # assuming uni-directional
             input = h_1_i
             if i + 1 != self.num_layers:
                 input = self.dropout(input)
@@ -203,13 +202,23 @@ class DecInit(nn.Module):
         self.enc_hidden_size = enc_hidden_size
         self.dec_hidden_size = dec_hidden_size
         self.bidirectional = bidirectional
-        self.initer = nn.Linear(self.enc_hidden_size, self.dec_hidden_size)
+        self.num_directions = 2 if bidirectional else 1
+        self.initer = nn.Linear(self.enc_hidden_size*self.num_directions, self.dec_hidden_size)
         self.tanh = nn.Tanh()
 
     def forward(self, enc_hidden):
         """
-        enc_hidden: batch_size x hidden_size
+        enc_hidden: num_layers*num_directions x  batch_size x enc_hidden_size
+
+        Return:
+            num_layers x batch_size x dec_hidden_size
         """
+        if self.bidirectional:
+            _, batch, dim = enc_hidden.size()
+            enc_hidden = enc_hidden.view(-1, 2, batch, dim).contiguous()
+            enc_hidden = enc_hidden.transpose(1,2).contiguous()
+            enc_hidden = enc_hidden.view(-1, batch, 2*dim).contiguous()
+
         return self.tanh(self.initer(enc_hidden))
 
 
