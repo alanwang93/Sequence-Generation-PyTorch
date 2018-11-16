@@ -20,7 +20,7 @@ from s2s.utils.summary import Summary
 def test(args):
     assert args.restore is not None
 
-    model_path = os.path.join(args.model_root, args.config, args.suffix)
+    model_path = os.path.join(args.model_root, args.config + '_' + args.dataset, args.suffix)
     if not os.path.exists(model_path):
         os.makedirs(model_path)
 
@@ -55,9 +55,9 @@ def test(args):
     cf.src_vocab_size = len(src_vocab)
     cf.tgt_vocab_size = len(tgt_vocab)
 
-    train, dev, test = build_dataloaders(cf, src_vocab, tgt_vocab, False)
-    n_train, n_dev, n_test = map(len, [train, dev, test])
-    logger.info('Dataset sizes: train {0}, dev {1}, test {2}'.format(n_train, n_dev, n_test))
+    train, dev, test = build_dataloaders(cf, src_vocab, tgt_vocab, False, False)
+    n_dev, n_test = map(len, [dev, test])
+    logger.info('Dataset sizes: dev {0}, test {1}'.format(n_dev, n_test))
 
     # model
     model = getattr(models, cf.model)(cf, src_vocab, tgt_vocab, args.restore)
@@ -70,35 +70,34 @@ def test(args):
     step = checkpoint['step']
     
 
-    #dev_loss = 0
-    #n_dev_batch = 0
-    #model.eval()
-    #dev_hyps, dev_refs = [], []
-    #for dev_batch in dev:
-    #    dev_batch = to(dev_batch, device)
-    #    dev_loss_, n_dev_batch_ = model.get_loss(dev_batch)
-    #    dev_loss += dev_loss_*n_dev_batch_
-    #    n_dev_batch += n_dev_batch_
-    #    preds = model.greedy_decode(dev_batch)
-    #    for ref, hyp in zip(dev_batch['tgt_in'], preds):
-    #        ref = ' '.join(tgt_vocab.tos(ref))
-    #        hyp = ' '.join(tgt_vocab.tos(hyp))
-    #        if hyp == '':
-    #            hyp = ' '
-    #        dev_refs.append(ref)
-    #        dev_hyps.append(hyp)
-    #dev_loss /= n_dev_batch
-    #
+    dev_loss = 0
+    n_dev_batch = 0
+    model.eval()
+    dev_hyps, dev_refs = [], []
+    for dev_batch in dev:
+        dev_batch = to(dev_batch, device)
+        dev_loss_, n_dev_batch_ = model.get_loss(dev_batch)
+        dev_loss += dev_loss_*n_dev_batch_
+        n_dev_batch += n_dev_batch_
+        preds = model.greedy_decode(dev_batch)
+        for ref, hyp in zip(dev_batch['tgt_in'], preds):
+            ref = ' '.join(tgt_vocab.tos(ref))
+            hyp = ' '.join(tgt_vocab.tos(hyp))
+            if hyp == '':
+                hyp = ' '
+            dev_refs.append(ref)
+            dev_hyps.append(hyp)
+    dev_loss /= n_dev_batch
+    
     ## dev summary
-    #dev_metrics = {'loss':dev_loss}
-    #names = ['rouge']
-    #dev_metrics.update(compute_metrics(dev_hyps, dev_refs, names))
-#
-#    logger.info('[Dev] Step {0}, Loss: {1:.5f}'.format(step, dev_loss))
-#    for k, v in dev_metrics.items():
-#        logger.info('[Dev]\t{0}: {1:.5f}'.format(k, v))
-#
-#    logger.info('[Dev] Sample:\nref: {0}\nhyp: {1}\n'.format(dev_refs[0], dev_hyps[0]))
+    dev_metrics = {'loss':dev_loss}
+    names = ['rouge']
+    dev_metrics.update(compute_metrics(dev_hyps, dev_refs, names))
+
+    logger.info('[Dev] Step {0}, Loss: {1:.5f}'.format(step, dev_loss))
+    for k, v in dev_metrics.items():
+        logger.info('[Dev]\t{0}: {1:.5f}'.format(k, v))
+    logger.info('[Dev] Sample:\nref: {0}\nhyp: {1}\n'.format(dev_refs[0], dev_hyps[0]))
 
 
     # eval on test set
@@ -131,9 +130,9 @@ def test(args):
     for k, v in test_metrics.items():
         logger.info('[Test]\t{0}: {1:.5f}'.format(k, v))
 
-    fout = open('test.out', 'w')
+    fout = open('checkpoints/test.out', 'w')
     for i in range(len(test_refs)):
-        logger.info('[Test] Sample:\nref: {0}\nhyp: {1}\n'.format(test_refs[i], test_hyps[i]))
+        #logger.info('[Test] Sample:\nref: {0}\nhyp: {1}\n'.format(test_refs[i], test_hyps[i]))
         fout.write('{0}\t{1}\n'.format(test_refs[i], test_hyps[i]))
 
 

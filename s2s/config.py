@@ -27,6 +27,8 @@ class Config:
         # validation
         self.metric = 'ROUGE-2'
         self.init_metric = 0.
+        self.patience = 5
+        self.decay_factor = 0.5
 
         # pretrained embedding
         # stored in raw_root/embeddings/...
@@ -38,6 +40,102 @@ class Config:
             return True
         return False
 
+
+class PosGatedS2S(Config):
+    def __init__(self, raw_root, data_root, model_path, dataset):
+        super().__init__(raw_root, data_root, model_path, dataset)
+        self.model = 'PosGatedSeq2seq'
+        self.hidden_size = 512
+        self.enc_num_layers = 1
+        self.dec_num_layers = 1
+        self.embed_size = 300
+        self.bidirectional = True
+        self.embed_dropout = 0.0
+        self.rnn_dropout = 0.5
+        self.mlp_dropout = 0.5
+        self.attn_type = 'concat'
+        # embedding
+        self.pretrained = None #'glove.6B.300d.txt'
+        self.pretrained_size = 300
+        self.projection = None
+
+        self.optimizer = 'Adam'
+        self.optimizer_kwargs = dict(
+                lr=0.001, 
+                betas=(0.9, 0.999), 
+                eps=1e-08, 
+                weight_decay=0)
+        self.clip_norm = 5.
+        self.patience = 5 # halve lr if dev metric doesn't improve for n steps
+        self.decay_factor = 0.5
+
+        # log
+        self.log_freq = 100
+        self.eval_freq = 1000
+
+class AttGateS2S(Config):
+    def __init__(self, raw_root, data_root, model_path, dataset):
+        super().__init__(raw_root, data_root, model_path, dataset)
+        self.model = 'AttGateSeq2seq'
+        self.hidden_size = 512
+        self.enc_num_layers = 1
+        self.dec_num_layers = 1
+        self.embed_size = 300
+        self.bidirectional = True
+        self.embed_dropout = 0.0
+        self.rnn_dropout = 0.5
+        self.mlp_dropout = 0.5
+        self.attn_type = 'concat'
+        # embedding
+        self.pretrained = 'glove.6B.300d.txt'
+        self.pretrained_size = 300
+        self.projection = None
+
+        self.optimizer = 'Adam'
+        self.optimizer_kwargs = dict(
+                lr=0.001, 
+                betas=(0.9, 0.999), 
+                eps=1e-08, 
+                weight_decay=0)
+        self.clip_norm = 5.
+        self.patience = 5 # halve lr if dev metric doesn't improve for n steps
+        self.decay_factor = 0.5
+
+        # log
+        self.log_freq = 100
+        self.eval_freq = 1000
+
+class AGS2S(Config):
+    def __init__(self, raw_root, data_root, model_path, dataset):
+        super().__init__(raw_root, data_root, model_path, dataset)
+        self.model = 'AGSeq2seq'
+        self.hidden_size = 512
+        self.enc_num_layers = 1
+        self.dec_num_layers = 1
+        self.embed_size = 300
+        self.bidirectional = True
+        self.embed_dropout = 0.0
+        self.rnn_dropout = 0.5
+        self.mlp_dropout = 0.5
+        self.attn_type = 'concat'
+        # embedding
+        self.pretrained = 'glove.6B.300d.txt'
+        self.pretrained_size = 300
+        self.projection = None
+
+        self.optimizer = 'Adam'
+        self.optimizer_kwargs = dict(
+                lr=0.001, 
+                betas=(0.9, 0.999), 
+                eps=1e-08, 
+                weight_decay=0)
+        self.clip_norm = 5.
+        self.patience = 5 # halve lr if dev metric doesn't improve for n steps
+        self.decay_factor = 0.5
+
+        # log
+        self.log_freq = 100
+        self.eval_freq = 1000
 
 class GatedDecoder(Config):
     def __init__(self, raw_root, data_root, model_path, dataset):
@@ -65,11 +163,79 @@ class GatedDecoder(Config):
                 weight_decay=0)
         self.clip_norm = 5.
         self.patience = 5 # halve lr if dev metric doesn't improve for n steps
+        self.decay_factor = 0.5
 
         # log
         self.log_freq = 100
         self.eval_freq = 1000
 
+
+class VanillaIF(Config):
+    """
+    With input feed (add context vector to input)
+    """
+    def __init__(self, raw_root, data_root, model_path, dataset):
+        super().__init__(raw_root, data_root, model_path, dataset)
+        self.model = 'Seq2seq'
+        self.hidden_size = 512
+        self.enc_num_layers = 1
+        self.dec_num_layers = 1
+        self.embed_size = 300
+        self.bidirectional = True
+        self.embed_dropout = 0.0
+        self.rnn_dropout = 0.5
+        self.mlp_dropout = 0.5
+        self.attn_type = 'concat'
+        # embedding
+        self.pretrained = 'glove.6B.300d.txt'
+        self.pretrained_size = 300
+        self.projection = None
+
+        self.optimizer = 'Adam'
+        self.optimizer_kwargs = dict(
+                lr=0.001, 
+                betas=(0.9, 0.999), 
+                eps=1e-08, 
+                weight_decay=0)
+        self.clip_norm = 5.
+        self.patience = 5 # decay lr if dev metric doesn't improve for n steps
+        self.decay_factor = 0.5
+
+        # log
+        self.log_freq = 100
+        self.eval_freq = 1000
+
+class SEASS(Config):
+    def __init__(self, raw_root, data_root, model_path, dataset):
+        super().__init__(raw_root, data_root, model_path, dataset)
+        self.model = 'SEASS'
+        self.hidden_size = 512
+        self.enc_num_layers = 1
+        self.dec_num_layers = 1
+        self.embed_size = 300
+        self.bidirectional = True
+        self.embed_dropout = 0.0
+        self.rnn_dropout = 0.5
+        self.mlp_dropout = 0.5
+        self.attn_type = 'concat'
+        # embedding
+        self.pretrained = 'glove.6B.300d.txt'
+        self.pretrained_size = 300
+        self.projection = None
+
+        self.optimizer = 'Adam'
+        self.optimizer_kwargs = dict(
+                lr=0.001, 
+                betas=(0.9, 0.999), 
+                eps=1e-08, 
+                weight_decay=0)
+        self.clip_norm = 5.
+        self.patience = 5 # decay lr if dev metric doesn't improve for n steps
+        self.decay_factor = 0.5
+
+        # log
+        self.log_freq = 100
+        self.eval_freq = 1000
 
 class Vanilla(Config):
     def __init__(self, raw_root, data_root, model_path, dataset):
@@ -136,6 +302,42 @@ class VanillaMedium(Config):
         self.eval_freq = 500
 
 
+
+class MTS2S_v2(Config):
+    def __init__(self, raw_root, data_root, model_path, dataset):
+        super().__init__(raw_root, data_root, model_path, dataset)
+
+        self.model = 'MTSeq2seq_v2'
+        self.hidden_size = 512
+        self.enc_num_layers = 1
+        self.dec_num_layers = 1
+        self.embed_size = 300
+        self.bidirectional = True
+        self.embed_dropout = 0.0
+        self.rnn_dropout = 0.5
+        self.mlp_dropout = 0.5
+        # embedding
+        self.pretrained = 'glove.6B.300d.txt'
+        self.pretrained_size = 300 #300
+        self.projection = False
+        self.mt_coef = 0.1
+
+        self.attn_type = 'concat'
+        #self.mlp1_size = None
+
+        self.optimizer = 'Adam'
+        self.optimizer_kwargs = dict(
+                lr=0.001, 
+                betas=(0.9, 0.999), 
+                eps=1e-08, 
+                weight_decay=0)
+        self.clip_norm = 5.
+        self.patience = 5 # halve lr if dev metric doesn't improve for n steps
+        # log
+        self.log_freq = 100
+        self.eval_freq = 1000
+
+
 class MTS2S(Config):
     def __init__(self, raw_root, data_root, model_path, dataset):
         super().__init__(raw_root, data_root, model_path, dataset)
@@ -150,7 +352,7 @@ class MTS2S(Config):
         self.rnn_dropout = 0.5
         self.mlp_dropout = 0.5
         # embedding
-        self.pretrained = None #'glove.6B.300d.txt'
+        self.pretrained = 'glove.6B.300d.txt'
         self.pretrained_size = None #300
         self.projection = False
         self.mt_coef = 0.1

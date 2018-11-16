@@ -46,7 +46,8 @@ def build_dataloaders(
         config, 
         src_vocab, 
         tgt_vocab, 
-        rebuild=False):
+        rebuild=False,
+        is_training=True):
     """
     src_in:
         if src_out == False: t0, ... tn
@@ -62,10 +63,15 @@ def build_dataloaders(
     max_len_src = dc.max_len_src
     max_len_tgt = dc.max_len_tgt
     dataloaders = []
-    for prefix in [dc.train_prefix,
+    if is_training:
+        pres = [dc.train_prefix,
                    dc.dev_prefix,
-                   dc.test_prefix]:
-        
+                   dc.test_prefix]
+    else:
+        pres = [dc.dev_prefix, dc.test_prefix]
+        dataloaders.append(None)
+
+    for prefix in pres:
         prefix_file = os.path.join(dc.raw, prefix)
         src_file = prefix_file + '.' + dc.src
         tgt_file = prefix_file + '.' + dc.tgt

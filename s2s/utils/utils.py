@@ -9,6 +9,7 @@ import math
 from rouge import Rouge
 import torch.nn as nn
 import torch.nn.init as init
+import numpy as np
 
 def update_config(config, params):
     """
@@ -116,6 +117,13 @@ def init_weights(param, name=None):
     print('Initialize {0}'.format(name))
     
 
+def get_vocab_weights(vocab):
+    weights = np.ones(len(vocab))
+    vocab_txt = os.path.join(vocab.path, 'tgt_vocab.txt')
+    with open(vocab_txt) as f:
+        for i, line in enumerate(f):
+            weights[4+i] = 1/np.log10(float(line.split()[1]))
+    return weights
 
 
 

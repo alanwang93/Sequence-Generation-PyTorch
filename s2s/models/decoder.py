@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from s2s.models.common import Feedforward, Embedding, sequence_mask, Attention, StackedGRU, \
-        ScoreLayer
+        ScoreLayer, AttentiveGate
 
 
 """
@@ -47,7 +47,7 @@ class Decoder(nn.Module):
     def init_weights(self):
         pass
 
-    def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=10):
+    def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=30):
         """
         inputs (batch, 1, dim)
         """
@@ -120,24 +120,6 @@ class RNNDecoder(Decoder):
                 self.hidden_size,
                 self.vocab_size)
 
-        self.init_weights()
-
-    def init_weights(self):
-        # RNN
-        for i in range(self.num_layers):
-            if self.cell == 'gru':
-                K = 3
-            elif self.cell == 'lstm':
-                K = 4
-            for k in range(K):
-                s = k*self.hidden_size
-                e = (k+1)*self.hidden_size
-                w = getattr(self.rnn, 'weight_ih_l{0}'.format(i))[s:e]
-                nn.init.orthogonal_(w)
-                w = getattr(self.rnn, 'weight_hh_l{0}'.format(i))[s:e]
-                nn.init.orthogonal_(w)
-
-
     def step(self, embed_t, hidden, context=None, mask=None):
         """
         embed_t: batch x embed_size
@@ -160,10 +142,97 @@ class RNNDecoder(Decoder):
         logits = self.mlp1(outputs)
         return logits
 
+class AttGateDecoder(Decoder):
+    """
+    FAIL
+    Attentive gating
+    # The deocder set a gate for encoder outputs
+    Gate instead of attention
+    """
+    def __init__(self,
+            hidden_size,
+            num_layers,
+            embed,
+            rnn_dropout=0., 
+            mlp_dropout=0.,
+            attn_type='concat'):
+
+        super().__init__()
+        
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.embed_size = embed.embed_size
+        self.vocab_size = embed.vocab_size
+        self.attn_type = attn_type
+
+        self.embedding = embed
+        self.cell = 'gru'
+
+        self.rnn = StackedGRU(
+                self.embed_size,
+                self.hidden_size,
+                self.num_layers,
+                rnn_dropout)
+
+        # TODO: flexible hidden_size
+        self.mlp1 = nn.Linear(
+                self.hidden_size,
+                self.vocab_size)
+
+        self.dropout = nn.Dropout(mlp_dropout)
+        self.gate = AttentiveGate(
+                hidden_size*2, # bi-GRU
+                hidden_size,
+                'concat',
+                hidden_size)
+        self.score_layer = 'readout'
+        self.score_layer_ = ScoreLayer(
+                self.vocab_size,
+                hidden_size*2,
+                hidden_size,
+                self.embed_size,
+                self.score_layer)
+
+        #self.gate = nn.Linear(hidden_size*3, hidden_size*2)
 
 
-class AttnRNNDecoder(Decoder):
+    def step(self, embed_t, hidden, context=None, mask=None):
+        """
 
+        """
+        output, h_n = self.rnn(embed_t, hidden)
+        # gating
+        #tmp = torch.cat((output.unsqueeze(1).expand(-1, context.size(1), -1), context), -1)
+        #gate = self.gate(tmp)
+        #context = context * gate
+        weighted, gate = self.gate(output, context, mask)
+        logit = self.score_layer_(output, weighted, embed_t)
+        return logit, h_n, weighted, gate
+
+    def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
+        """
+        
+        """
+        batch_size, seq_len = inputs.size()
+        mask = sequence_mask(context_lengths, context.size(1)).unsqueeze(1)
+        #embedded = self.embedding(inputs)
+        #outputs = []
+        logits = []
+        embedded = self.embedding(inputs)
+        for embed_t in embedded.split(1, dim=1):
+            embed_t = embed_t.squeeze(1)
+            logit, hidden, weighted, p_attn = self.step(embed_t, hidden, context, mask)
+            logits.append(logit)
+        logits = torch.stack(logits, 1).squeeze(2)
+        return logits
+
+
+class AGDecoder(Decoder):
+    """
+    NOT BAD
+    Attentive gating
+    The deocder set a gate for encoder outputs
+    """
     def __init__(self,
             hidden_size,
             num_layers,
@@ -208,12 +277,18 @@ class AttnRNNDecoder(Decoder):
                 self.embed_size,
                 self.score_layer)
 
+        self.gate = nn.Linear(hidden_size*3, hidden_size*2)
+
 
     def step(self, embed_t, hidden, context=None, mask=None):
         """
 
         """
         output, h_n = self.rnn(embed_t, hidden)
+        # gating
+        tmp = torch.cat((output.unsqueeze(1).expand(-1, context.size(1), -1), context), -1)
+        gate = self.gate(tmp)
+        context = context * gate
         weighted, p_attn = self.attn(output, context, mask)
         logit = self.score_layer_(output, weighted, embed_t)
         return logit, h_n, weighted, p_attn
@@ -236,11 +311,98 @@ class AttnRNNDecoder(Decoder):
         return logits
 
 
+class AttnRNNDecoder(Decoder):
+    """
+    
+    """
+    def __init__(self,
+            hidden_size,
+            num_layers,
+            embed,
+            rnn_dropout=0., 
+            mlp_dropout=0.,
+            attn_type='concat'):
+
+        super().__init__()
+        
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.embed_size = embed.embed_size
+        self.vocab_size = embed.vocab_size
+        self.attn_type = attn_type
+
+        self.embedding = embed
+        self.cell = 'gru'
+
+        self.input_feed = True
+        self.input_size = self.embed_size
+        if self.input_feed:
+            self.input_size += self.hidden_size*2
+
+
+        self.rnn = StackedGRU(
+                self.input_size,
+                self.hidden_size,
+                self.num_layers,
+                rnn_dropout)
+
+        # TODO: flexible hidden_size
+        #self.mlp1 = nn.Linear(
+        #        self.hidden_size,
+        #        self.vocab_size)
+
+        #self.dropout = nn.Dropout(mlp_dropout)
+        self.attn = Attention(
+                hidden_size*2, # bi-GRU
+                hidden_size,
+                attn_type,
+                hidden_size)
+        self.score_layer = 'readout'
+        self.score_layer_ = ScoreLayer(
+                self.vocab_size,
+                hidden_size*2,
+                hidden_size,
+                self.embed_size,
+                self.score_layer)
+
+    def make_init_att(self, context):
+        return context.data.new(context.size(0), context.size(2)).zero_()
+
+    def step(self, embed_t, hidden, context=None, mask=None, weighted=None):
+        """
+
+        """
+        inp_t = embed_t
+        if self.input_feed:
+            inp_t = torch.cat((embed_t, weighted), 1)
+        output, h_n = self.rnn(inp_t, hidden)
+        weighted, p_attn = self.attn(output, context, mask)
+        logit = self.score_layer_(output, weighted, embed_t)
+        return logit, h_n, weighted, p_attn
+
+    def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
+        """
+        
+        """
+        weighted = self.make_init_att(context)
+        batch_size, seq_len = inputs.size()
+        mask = sequence_mask(context_lengths, context.size(1)).unsqueeze(1)
+        logits = []
+        embedded = self.embedding(inputs)
+        for embed_t in embedded.split(1, dim=1):
+            embed_t = embed_t.squeeze(1)
+            logit, hidden, weighted, p_attn = self.step(embed_t, hidden, context, mask, weighted)
+            logits.append(logit)
+        logits = torch.stack(logits, 1).squeeze(2)
+        return logits
+
+
 class GatedAttnRNNDecoder(Decoder):
     """
     Another RNN encoder will encode the predictions (or ground truth during training)
     of our decoder, whose hidden states will be used to generate a gate for decoder hidden
-    state before it's passed to next time step
+    state before it's passed to next time step;
+    The intuition is to explicitly let the decoder know what has been generated
     """
 
     def __init__(self,
@@ -328,7 +490,7 @@ class GatedAttnRNNDecoder(Decoder):
         logits = torch.stack(logits, 1).squeeze(2)
         return logits
 
-    def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=10):
+    def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=30):
         """
         inputs (batch, 1, dim)
         """
@@ -453,7 +615,7 @@ class MinusAttnRNNDecoder(Decoder):
         logits = torch.stack(logits, 1).squeeze(2)
         return logits
 
-    def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=10):
+    def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=30):
         """
         inputs (batch, 1, dim)
         """

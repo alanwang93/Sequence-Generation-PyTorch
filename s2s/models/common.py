@@ -39,6 +39,7 @@ class Feedforward(nn.Module):
 def sequence_mask(lengths, max_len=None):
     """
     Creates a boolean mask from sequence lengths.
+    B X L
     """
     device = lengths.device
     batch_size = lengths.numel()
@@ -99,6 +100,42 @@ class ScoreLayer(nn.Module):
             logit = self.W(maxout)
 
         return logit
+
+class AttentiveGate(nn.Module):
+    
+    def __init__(self,
+            value_dim,
+            query_dim,
+            attn_type,
+            attn_dim):
+        super().__init__()
+        
+        self.attn_type = attn_type
+        if self.attn_type == 'concat':
+            self.Wh = nn.Linear(value_dim, attn_dim, bias=True)
+            self.Ws = nn.Linear(query_dim, attn_dim, bias=True)
+            self.a2ctx = nn.Linear(attn_dim, value_dim, bias=True)
+        elif self.attn_type == 'linear':
+            self.W = nn.Linear(value_dim+query_dim, value_dim, bias=True)
+            #self.Ws = nn.Linear(query_dim, value_dim, bias=False)
+
+    def forward(self, output, context, mask):
+        if self.attn_type == 'concat':
+            context_ = self.Wh(context)
+            output_ = self.Ws(output).unsqueeze(1).expand_as(context_)
+            tmp = torch.tanh(context_ + output_) # batch x src_len x d
+            gate = torch.sigmoid(self.a2ctx(tmp)) # B x L x VD
+            #scores = scores.masked_fill(mask == 0, -1e9)
+            gate = gate * mask.transpose(1,2).float()
+            weighted = torch.mean(gate * context, 1)
+        elif self.attn_type == 'linear':
+            tmp = torch.cat((context, output.unsqueeze(1).expand(-1, context.size(1), -1)), -1)
+            gate = torch.sigmoid(self.W(tmp))
+            gate = gate * mask.transpose(1,2).float()
+            weighted = torch.mean(gate*context, 1)
+
+        return weighted, gate
+
 
 
 class Attention(nn.Module):
@@ -204,6 +241,7 @@ class DecInit(nn.Module):
         self.bidirectional = bidirectional
         self.num_directions = 2 if bidirectional else 1
         self.initer = nn.Linear(self.enc_hidden_size*self.num_directions, self.dec_hidden_size)
+        #self.initer = nn.Linear(self.enc_hidden_size, self.dec_hidden_size)
         self.tanh = nn.Tanh()
 
     def forward(self, enc_hidden):
