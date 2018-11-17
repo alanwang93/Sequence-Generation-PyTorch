@@ -17,7 +17,19 @@ from s2s.models.encoder import RNNEncoder, SelfFusionEncoder, SelectiveEncoder, 
 from s2s.models.decoder import RNNDecoder, AttnRNNDecoder, GatedAttnRNNDecoder, \
     AGDecoder, AttGateDecoder
 
-class AttGateSeq2seq(nn.Module):
+
+class BaseModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+
+    def clip_weight(self, max_weight_value):
+        if max_weight_value:
+            for p in self.params:
+                p.data.clamp_(0 - max_weight_value, max_weight_value)
+
+
+class AttGateSeq2seq(BaseModel):
     def __init__(self, config, src_vocab, tgt_vocab, restore):
         super().__init__()
         cf = config
@@ -97,6 +109,7 @@ class AttGateSeq2seq(nn.Module):
         loss.backward()
         nn.utils.clip_grad_norm_(self.params, self.config.clip_norm)
         self.optimizer.step()
+        self.clip_weight(self.config.max_weight_value)
         return loss.item(), batch_size
 
     def get_loss(self, batch):
@@ -113,7 +126,7 @@ class AttGateSeq2seq(nn.Module):
         preds = self.decoder.greedy_decode(dec_init, self.sos_idx, self.eos_idx, src_outputs, len_src)
         return preds
 
-class AGSeq2seq(nn.Module):
+class AGSeq2seq(BaseModel):
     def __init__(self, config, src_vocab, tgt_vocab, restore):
         super().__init__()
         cf = config
@@ -193,6 +206,7 @@ class AGSeq2seq(nn.Module):
         loss.backward()
         nn.utils.clip_grad_norm_(self.params, self.config.clip_norm)
         self.optimizer.step()
+        self.clip_weight(self.config.max_weight_value)
         return loss.item(), batch_size
 
     def get_loss(self, batch):
@@ -209,7 +223,7 @@ class AGSeq2seq(nn.Module):
         preds = self.decoder.greedy_decode(dec_init, self.sos_idx, self.eos_idx, src_outputs, len_src)
         return preds
 
-class GatedSeq2seq(nn.Module):
+class GatedSeq2seq(BaseModel):
     def __init__(self, config, src_vocab, tgt_vocab, restore):
         super().__init__()
         cf = config
@@ -289,6 +303,7 @@ class GatedSeq2seq(nn.Module):
         loss.backward()
         nn.utils.clip_grad_norm_(self.params, self.config.clip_norm)
         self.optimizer.step()
+        self.clip_weight(self.config.ax_weight_value)
         return loss.item(), batch_size
 
     def get_loss(self, batch):
@@ -306,7 +321,7 @@ class GatedSeq2seq(nn.Module):
         return preds
 
  
-class PosGatedSeq2seq(nn.Module):
+class PosGatedSeq2seq(BaseModel):
     def __init__(self, config, src_vocab, tgt_vocab, restore):
         super().__init__()
         cf = config
@@ -386,6 +401,7 @@ class PosGatedSeq2seq(nn.Module):
         loss.backward()
         nn.utils.clip_grad_norm_(self.params, self.config.clip_norm)
         self.optimizer.step()
+        self.clip_weight(self.config.max_weight_value)
         return loss.item(), batch_size
 
     def get_loss(self, batch):
@@ -403,7 +419,7 @@ class PosGatedSeq2seq(nn.Module):
         return preds
 
  
-class SEASS(nn.Module):
+class SEASS(BaseModel):
     def __init__(self, config, src_vocab, tgt_vocab, restore):
         super().__init__()
         cf = config
@@ -483,6 +499,7 @@ class SEASS(nn.Module):
         loss.backward()
         nn.utils.clip_grad_norm_(self.params, self.config.clip_norm)
         self.optimizer.step()
+        self.clip_weight(self.config.max_weight_value)
         return loss.item(), batch_size
 
     def get_loss(self, batch):
@@ -500,7 +517,7 @@ class SEASS(nn.Module):
         return preds
 
  
-class Seq2seq(nn.Module):
+class Seq2seq(BaseModel):
     def __init__(self, config, src_vocab, tgt_vocab, restore):
         super().__init__()
         cf = config
@@ -561,9 +578,9 @@ class Seq2seq(nn.Module):
                 factor=0.5,
                 patience=cf.patience,
                 verbose=True)
-        loss_weights = torch.from_numpy(get_vocab_weights(tgt_vocab)).float()
+        #loss_weights = torch.from_numpy(get_vocab_weights(tgt_vocab)).float()
         self.loss = nn.CrossEntropyLoss(
-                weight=loss_weights, 
+                #weight=loss_weights, 
                 reduction='elementwise_mean', 
                 ignore_index=dc.pad_idx)
 
@@ -583,6 +600,7 @@ class Seq2seq(nn.Module):
         loss.backward()
         nn.utils.clip_grad_norm_(self.params, self.config.clip_norm)
         self.optimizer.step()
+        self.clip_weight(self.config.max_weight_value)
         return loss.item(), batch_size
 
     def get_loss(self, batch):
@@ -600,7 +618,7 @@ class Seq2seq(nn.Module):
         return preds
 
  
-class SelfFusionSeq2seq(nn.Module):
+class SelfFusionSeq2seq(BaseModel):
     def __init__(self, config, src_vocab, tgt_vocab, restore):
         super().__init__()
         cf = config
@@ -634,22 +652,28 @@ class SelfFusionSeq2seq(nn.Module):
 
         self.encoder = SelfFusionEncoder(
                 cf.hidden_size,
-                cf.num_layers,
+                cf.enc_num_layers,
                 encoder_embed,
                 cf.bidirectional,
                 cf.rnn_dropout)
 
         self.decoder = AttnRNNDecoder(
                 cf.hidden_size,
-                cf.num_layers,
+                cf.dec_num_layers,
                 decoder_embed,
                 cf.rnn_dropout,
                 cf.mlp_dropout,
                 cf.attn_type)
 
+        self.dec_initer = DecInit(
+                cf.hidden_size, 
+                cf.hidden_size,
+                cf.bidirectional)
+
+
         self.num_directions = 2 if cf.bidirectional else 1
 
-        self.params = list(self.encoder.parameters()) +  list(self.decoder.parameters())
+        self.params = self.parameters()#list(self.encoder.parameters()) +  list(self.decoder.parameters())
         self.optimizer = getattr(torch.optim, cf.optimizer)(self.params, **cf.optimizer_kwargs)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer, 
@@ -664,7 +688,8 @@ class SelfFusionSeq2seq(nn.Module):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
         src_output, src_last = self.encoder(src, len_src)
-        logits = self.decoder(tgt_in, len_tgt, src_last, src_output, len_src)
+        dec_init = self.dec_initer(src_last)#.unsqueeze(0) # last back hidden
+        logits = self.decoder(tgt_in, len_tgt, dec_init, src_output, len_src)
         return logits
 
     def train_step(self, batch):
@@ -675,6 +700,7 @@ class SelfFusionSeq2seq(nn.Module):
         loss.backward()
         nn.utils.clip_grad_norm_(self.params, self.config.clip_norm)
         self.optimizer.step()
+        self.clip_weight(self.config.max_weight_value)
         return loss.item(), batch_size
 
     def get_loss(self, batch):
@@ -686,12 +712,13 @@ class SelfFusionSeq2seq(nn.Module):
     def greedy_decode(self, batch):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, len_tgt = batch['tgt_in'],  batch['len_tgt']
-        src_last, src_outputs = self.encoder(src, len_src)
-        preds = self.decoder.greedy_decode(src_last, self.sos_idx, self.eos_idx, src_outputs, len_src)
+        src_output, src_last = self.encoder(src, len_src)
+        dec_init = self.dec_initer(src_last)#.unsqueeze(0) # last back hidden
+        preds = self.decoder.greedy_decode(dec_init, self.sos_idx, self.eos_idx, src_output, len_src)
         return preds
 
  
-class FusionSeq2seq(nn.Module):
+class FusionSeq2seq(BaseModel):
     """
     At each decode step, the hidden state should contain all the rest information
     """
@@ -728,14 +755,15 @@ class FusionSeq2seq(nn.Module):
 
         self.encoder = SelfFusionEncoder(
                 cf.hidden_size,
-                cf.num_layers,
+                cf.enc_num_layers,
                 encoder_embed,
                 cf.bidirectional,
                 cf.rnn_dropout)
 
-        self.decoder = AttnRNNDecoder(
+        #self.decoder = AttnRNNDecoder(
+        self.decoder = AGDecoder(
                 cf.hidden_size,
-                cf.num_layers,
+                cf.dec_num_layers,
                 decoder_embed,
                 cf.rnn_dropout,
                 cf.mlp_dropout,
@@ -763,6 +791,7 @@ class FusionSeq2seq(nn.Module):
         loss.backward()
         nn.utils.clip_grad_norm_(self.params, self.config.clip_norm)
         self.optimizer.step()
+        self.clip_weight(self.config.max_weight_value)
         return loss.item(), batch_size
 
     def get_loss(self, batch):

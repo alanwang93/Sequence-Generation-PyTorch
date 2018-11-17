@@ -257,7 +257,7 @@ class SelfFusionEncoder(Encoder):
         self.num_layers = num_layers
         self.embed_size = embed.embed_size
         self.vocab_size = embed.vocab_size
-        self.bidirectional = bidirectional
+        self.bidirectional = True #bidirectional
         self.num_directions = 2 if bidirectional else 1
         #self.dropout = dropout
         self.cell = cell
@@ -273,38 +273,13 @@ class SelfFusionEncoder(Encoder):
                 batch_first=True,
                 dropout=rnn_dropout,
                 bidirectional=self.bidirectional)
+
         self.attn_type = 'symmetric'
         if self.attn_type == 'symmetric':
-            self.inter_dim = 200
+            self.inter_dim = hidden_size
             self.D = nn.Linear(hidden_size, self.inter_dim, bias=False)
             self.U = nn.Linear(self.inter_dim, self.inter_dim, bias=False)
-            self.attn_out = nn.Linear(hidden_size*2, hidden_size)
-
-        self.init_weights()
-
-
-    def init_weights(self):
-        def init_rnn(rnn):
-            # RNN
-            for i in range(self.num_layers):
-                if self.cell == 'gru':
-                    K = 3
-                elif self.cell == 'lstm':
-                    K = 4
-                for k in range(K):
-                    s = k*self.hidden_size
-                    e = (k+1)*self.hidden_size
-                    w = getattr(rnn, 'weight_ih_l{0}'.format(i))[s:e]
-                    nn.init.orthogonal_(w)
-                    w = getattr(rnn, 'weight_hh_l{0}'.format(i))[s:e]
-                    nn.init.orthogonal_(w)
-                    if self.bidirectional:
-                        w = getattr(rnn, 'weight_ih_l{0}_reverse'.format(i))[s:e]
-                        nn.init.orthogonal_(w)
-                        w = getattr(rnn, 'weight_hh_l{0}_reverse'.format(i))[s:e]
-                        nn.init.orthogonal_(w)
-            return rnn
-        self.rnn = init_rnn(self.rnn)
+            #self.attn_out = nn.Linear(hidden_size*2, hidden_size)
 
 
     def forward(self, inputs, lengths, hidden=None, concat_output=True):
@@ -323,22 +298,27 @@ class SelfFusionEncoder(Encoder):
         _, _indices = torch.sort(indices, 0)
         outputs = outputs[_indices]
         h_n = h_n[:, _indices, :]
-        if not concat_output:
-            h_n = h_n.view(self.num_layers, self.num_directions, inputs.size(0), self.hidden_size)
-            h_n = torch.mean(h_n, 1)
-            outputs = torch.mean(outputs.view(outputs.size(0), outputs.size(1), self.num_directions, self.hidden_size), 2)
-        
-        mask = sequence_mask(lengths, outputs.size(1)).unsqueeze(1)
-        if self.attn_type == 'symmetric':
-            outputs_ = F.relu(self.D(outputs))
-            scores = torch.matmul(outputs_, outputs_.transpose(1,2)) # batch_size, tgt_len, src_len
-            scores = scores.masked_fill(mask == 0, -1e9)
-            p_attn = F.softmax(scores, -1)
-            weighted = torch.matmul(p_attn, outputs)
-            new_outputs = F.tanh(self.attn_out(torch.cat([outputs, outputs*weighted], -1)))
+        B, L, D = outputs.size()
+        outputs = outputs.view(B, L, 2, D//2)
+        forward = outputs[:,:,0]
+        backward = outputs[:,:,1]
 
-        
-        return new_outputs, h_n
+        mask = sequence_mask(lengths, L)# B x L
+        if self.attn_type == 'symmetric':
+            forward_ = F.relu(self.D(forward))
+            backward_ = F.relu(self.D(backward))
+            scores = torch.matmul(forward_, backward_.transpose(1,2)) # B, Forw, Back
+            scores_b = scores.masked_fill(mask.unsqueeze(1) == 0, -1e9)
+            p_b = F.softmax(scores_b, -1)
+            scores_f = scores.masked_fill(mask.unsqueeze(2) == 0, -1e9).transpose(1,2)
+            p_f = F.softmax(scores_f, -1)
+            weighted_b = torch.matmul(p_b, backward)
+            weighted_f = torch.matmul(p_f, forward)
+            # new_outputs = F.tanh(self.attn_out(torch.cat([outputs, outputs*weighted], -1)))
+            forward = forward + weighted_b
+            backward = backward + weighted_f
+            outputs = torch.cat((forward, backward), -1)
+        return outputs, h_n
 
 
 class CNNEncoder(Encoder):

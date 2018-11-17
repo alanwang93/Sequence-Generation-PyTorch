@@ -17,6 +17,7 @@ def update_config(config, params):
     """
     params = params.split(' ')
     assert len(params) % 2 == 0
+    config.max_weight_value = 15.
     #config.enc_num_layers = 1
     #config.dec_num_layers = 1
     #def is_better(self, cur, best):

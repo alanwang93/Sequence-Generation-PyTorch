@@ -29,6 +29,7 @@ class Config:
         self.init_metric = 0.
         self.patience = 5
         self.decay_factor = 0.5
+        self.max_weight_value = 15.
 
         # pretrained embedding
         # stored in raw_root/embeddings/...
@@ -409,22 +410,35 @@ class GatedMTS2S(Config):
         self.eval_freq = 1000
 
 
-class SelfFusion_Gigaword(Config):
-    def __init__(self, raw_root, data_root, model_path):
-        super().__init__(raw_root, data_root, model_path)
+class SelfFusion(Config):
+    def __init__(self, raw_root, data_root, model_path, dataset):
+        super().__init__(raw_root, data_root, model_path, dataset)
         self.model = 'SelfFusionSeq2seq'
-        self.dataset = Gigaword(raw_root, data_root)
         self.hidden_size = 512
-        self.num_layers = 1
+        self.enc_num_layers = 1
+        self.dec_num_layers = 1
         self.embed_size = 300
         self.bidirectional = True
-        self.embed_dropout = 0.2
-        self.rnn_dropout = 0.1
-        self.mlp_dropout = 0.2
+        self.embed_dropout = 0.0
+        self.rnn_dropout = 0.5
+        self.mlp_dropout = 0.5
+        self.attn_type = 'concat'
         # embedding
         self.pretrained = 'glove.6B.300d.txt'
         self.pretrained_size = 300
         self.projection = None
-        #self.clf_coef = 3.
-        self.mlp1_size = 400
+
+        self.optimizer = 'Adam'
+        self.optimizer_kwargs = dict(
+                lr=0.001, 
+                betas=(0.9, 0.999), 
+                eps=1e-08, 
+                weight_decay=0)
+        self.clip_norm = 5.
+        self.patience = 5 # decay lr if dev metric doesn't improve for n steps
+        self.decay_factor = 0.5
+
+        # log
+        self.log_freq = 100
+        self.eval_freq = 1000
 

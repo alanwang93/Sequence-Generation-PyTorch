@@ -175,16 +175,17 @@ class AttGateDecoder(Decoder):
                 rnn_dropout)
 
         # TODO: flexible hidden_size
-        self.mlp1 = nn.Linear(
-                self.hidden_size,
-                self.vocab_size)
+        #self.mlp1 = nn.Linear(
+        #        self.hidden_size,
+        #        self.vocab_size)
 
         self.dropout = nn.Dropout(mlp_dropout)
         self.gate = AttentiveGate(
                 hidden_size*2, # bi-GRU
                 hidden_size,
-                'concat',
+                'linear',
                 hidden_size)
+
         self.score_layer = 'readout'
         self.score_layer_ = ScoreLayer(
                 self.vocab_size,
@@ -259,9 +260,9 @@ class AGDecoder(Decoder):
                 rnn_dropout)
 
         # TODO: flexible hidden_size
-        self.mlp1 = nn.Linear(
-                self.hidden_size,
-                self.vocab_size)
+        #self.mlp1 = nn.Linear(
+        #        self.hidden_size,
+        #        self.vocab_size)
 
         self.dropout = nn.Dropout(mlp_dropout)
         self.attn = Attention(
@@ -277,7 +278,8 @@ class AGDecoder(Decoder):
                 self.embed_size,
                 self.score_layer)
 
-        self.gate = nn.Linear(hidden_size*3, hidden_size*2)
+        self.gate = nn.Linear(hidden_size, hidden_size*2)
+        #self.gate = nn.Linear(hidden_size*3+self.embed_size, hidden_size*2)
 
 
     def step(self, embed_t, hidden, context=None, mask=None):
@@ -286,7 +288,8 @@ class AGDecoder(Decoder):
         """
         output, h_n = self.rnn(embed_t, hidden)
         # gating
-        tmp = torch.cat((output.unsqueeze(1).expand(-1, context.size(1), -1), context), -1)
+        #tmp = torch.cat((embed_t, output.unsqueeze(1).expand(-1, context.size(1), -1), context), -1)
+        tmp = output.unsqueeze(1).expand(-1, context.size(1), -1)
         gate = self.gate(tmp)
         context = context * gate
         weighted, p_attn = self.attn(output, context, mask)
@@ -368,7 +371,7 @@ class AttnRNNDecoder(Decoder):
     def make_init_att(self, context):
         return context.data.new(context.size(0), context.size(2)).zero_()
 
-    def step(self, embed_t, hidden, context=None, mask=None, weighted=None):
+    def step(self, embed_t, hidden, context, mask, weighted):
         """
 
         """
@@ -396,6 +399,30 @@ class AttnRNNDecoder(Decoder):
         logits = torch.stack(logits, 1).squeeze(2)
         return logits
 
+    def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=30):
+        """
+        inputs (batch, 1, dim)
+        """
+        batch_size = hidden.size(1)
+        logits = []
+        preds = []
+        weighted = self.make_init_att(context)
+        mask = sequence_mask(context_lengths, context.size(1)).unsqueeze(1)
+        inp = sos_idx * torch.ones((batch_size,), dtype=torch.long).to(hidden.device)
+        while True:
+            embed_t = self.embedding(inp)
+            logit, hidden, weighted, p_attn = self.step(embed_t, hidden, context, mask, weighted)
+            logp = F.log_softmax(logit, dim=-1)
+            maxv, maxidx = torch.max(logp, dim=-1)
+            if ((maxidx == eos_idx).all() and len(preds) > 0)  or len(preds) >= max_length:
+                break
+            logits.append(logit)
+            preds.append(maxidx.unsqueeze(1).cpu().numpy())
+            inp = maxidx
+        logits = torch.cat(logits, dim=1)
+        preds = np.concatenate(preds, 1)
+        # print(preds.shape)
+        return preds
 
 class GatedAttnRNNDecoder(Decoder):
     """
@@ -438,9 +465,9 @@ class GatedAttnRNNDecoder(Decoder):
 
 
         # TODO: flexible hidden_size
-        self.mlp1 = nn.Linear(
-                self.hidden_size,
-                self.vocab_size)
+        #self.mlp1 = nn.Linear(
+        #        self.hidden_size,
+        #        self.vocab_size)
 
         self.dropout = nn.Dropout(mlp_dropout)
         self.attn = Attention(
@@ -563,9 +590,9 @@ class MinusAttnRNNDecoder(Decoder):
 
 
         # TODO: flexible hidden_size
-        self.mlp1 = nn.Linear(
-                self.hidden_size,
-                self.vocab_size)
+        #self.mlp1 = nn.Linear(
+        #        self.hidden_size,
+        #        self.vocab_size)
 
         self.dropout = nn.Dropout(mlp_dropout)
         self.attn = Attention(

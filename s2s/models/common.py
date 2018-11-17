@@ -77,7 +77,7 @@ class ScoreLayer(nn.Module):
             dec_size,
             embed_size,
             score_type='readout',
-            dropout=0.3):
+            dropout=0.5):
         super().__init__()
         self.vocab_size = vocab_size
         self.enc_size = enc_size # or context size
@@ -101,6 +101,7 @@ class ScoreLayer(nn.Module):
 
         return logit
 
+
 class AttentiveGate(nn.Module):
     
     def __init__(self,
@@ -113,7 +114,7 @@ class AttentiveGate(nn.Module):
         self.attn_type = attn_type
         if self.attn_type == 'concat':
             self.Wh = nn.Linear(value_dim, attn_dim, bias=True)
-            self.Ws = nn.Linear(query_dim, attn_dim, bias=True)
+            self.Ws = nn.Linear(query_dim, attn_dim, bias=False)
             self.a2ctx = nn.Linear(attn_dim, value_dim, bias=True)
         elif self.attn_type == 'linear':
             self.W = nn.Linear(value_dim+query_dim, value_dim, bias=True)
@@ -127,12 +128,12 @@ class AttentiveGate(nn.Module):
             gate = torch.sigmoid(self.a2ctx(tmp)) # B x L x VD
             #scores = scores.masked_fill(mask == 0, -1e9)
             gate = gate * mask.transpose(1,2).float()
-            weighted = torch.mean(gate * context, 1)
+            weighted,_ = torch.max(gate * context, 1)
         elif self.attn_type == 'linear':
             tmp = torch.cat((context, output.unsqueeze(1).expand(-1, context.size(1), -1)), -1)
             gate = torch.sigmoid(self.W(tmp))
             gate = gate * mask.transpose(1,2).float()
-            weighted = torch.mean(gate*context, 1)
+            weighted,_ = torch.max(gate*context, 1)
 
         return weighted, gate
 
