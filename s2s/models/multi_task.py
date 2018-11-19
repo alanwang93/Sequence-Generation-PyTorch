@@ -119,6 +119,7 @@ class MTSeq2seq(nn.Module):
         self.eos_idx = dc.eos_idx
         self.src_vocab = src_vocab
         self.tgt_vocab = tgt_vocab
+        self.mt_coef = cf.mt_coef
         if cf.pretrained is not None:
             pretrained = os.path.join(cf.raw_root, 'embeddings', cf.pretrained)
         else:
@@ -166,8 +167,8 @@ class MTSeq2seq(nn.Module):
                 cf.attn_type)
         
         self.num_directions = 2 if cf.bidirectional else 1
-        self.mt_linear = nn.Linear(cf.hidden_size*2, 3) # TODO: add sentence repr
-
+        self.mt_linear = nn.Linear(cf.hidden_size*2, cf.hidden_size//2) # TODO: add sentence repr
+        self.mt_linear2 = nn.Linear(cf.hidden_size//2, 3)
         self.dec_initer = DecInit(
                 cf.hidden_size, 
                 cf.hidden_size, 
@@ -182,6 +183,7 @@ class MTSeq2seq(nn.Module):
                 factor=0.5,
                 patience=cf.patience,
                 verbose=True)
+        self.dropout = nn.Dropout(0.5)
        
         self.loss = nn.CrossEntropyLoss(reduction='elementwise_mean', ignore_index=dc.pad_idx)
         self.mt_loss = nn.CrossEntropyLoss(weight=torch.Tensor([0., 5., 1.]), reduction='elementwise_mean', ignore_index=dc.pad_idx)
@@ -192,7 +194,8 @@ class MTSeq2seq(nn.Module):
         src_output, src_last = self.encoder(src, len_src)
         dec_init = self.dec_initer(src_last)#.unsqueeze(0)
         logits = self.decoder(tgt_in, len_tgt, dec_init, src_output, len_src)
-        mt_logits = self.mt_linear(src_output)
+        mt_logits = self.dropout(self.mt_linear(src_output))
+        mt_logits = self.mt_linear2(F.relu(mt_logits))
         return logits, mt_logits
 
     def train_step(self, batch):
@@ -203,7 +206,7 @@ class MTSeq2seq(nn.Module):
         mt_loss = self.mt_loss(input=mt_logits.view(batch_size*en_seq_len, -1),\
                 target=batch['src_out'][:,:en_seq_len].contiguous().view(-1))
         self.optimizer.zero_grad()
-        total_loss = loss + self.config.mt_coef *mt_loss
+        total_loss = loss + self.mt_coef *mt_loss
         total_loss.backward()
         nn.utils.clip_grad_norm_(self.params, self.config.clip_norm)
         self.optimizer.step()

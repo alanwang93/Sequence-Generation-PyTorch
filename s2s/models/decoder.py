@@ -44,8 +44,9 @@ class Decoder(nn.Module):
     def forward(self, inputs, lengths, hidden=None, context=None, context_lengths=None, tf_ratio=1.0):
         raise NotImplementedError()
 
-    def init_weights(self):
-        pass
+    def make_init_att(self, context):
+        return context.data.new(context.size(0), context.size(2)).zero_()
+
 
     def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=30):
         """
@@ -62,6 +63,8 @@ class Decoder(nn.Module):
             logp = F.log_softmax(logit, dim=-1)
             maxv, maxidx = torch.max(logp, dim=-1)
             if ((maxidx == eos_idx).all() and len(preds) > 0)  or len(preds) >= max_length:
+                if len(preds) >= max_length:
+                    print('max len achieved')
                 break
             logits.append(logit)
             preds.append(maxidx.unsqueeze(1).cpu().numpy())
@@ -77,10 +80,14 @@ class Decoder(nn.Module):
 
     def sample(self, inputs, lengths, hidden=None, context=None, context_lengths=None, temperature=None):
         pass
+
+
         
 
 class RNNDecoder(Decoder):
-
+    """
+    Simple GRU decoder with MLP scoring layer
+    """
     def __init__(self,
             hidden_size,
             num_layers,
@@ -93,21 +100,13 @@ class RNNDecoder(Decoder):
         
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-      #  self.embed = embed
         self.vocab_size = embed.vocab_size
         self.embed_size = embed.embed_size
 
-        #self.dropout = dropout
         self.embedding = embed
 
         self.cell = 'gru'
         # TODO
-        #self.rnn = nn.GRU(
-        #        input_size = self.embed_size,
-        #        hidden_size = self.hidden_size,
-        #        num_layers = self.num_layers,
-        #        batch_first=True,
-        #        dropout=rnn_dropout)
 
         self.rnn = StackedGRU(
                 self.embed_size,
@@ -115,16 +114,11 @@ class RNNDecoder(Decoder):
                 self.num_layers,
                 rnn_dropout)
 
-        # TODO: flexible hidden_size
         self.mlp1 = nn.Linear(
                 self.hidden_size,
                 self.vocab_size)
 
     def step(self, embed_t, hidden, context=None, mask=None):
-        """
-        embed_t: batch x embed_size
-        hidden: 
-        """
         # output: (batch, 1, hidden_size)
         output, h_n = self.rnn(embed_t, hidden)
         # (batch, 1, vocab_size)
@@ -133,9 +127,6 @@ class RNNDecoder(Decoder):
 
 
     def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
-        """
-        
-        """
         #batch_size, seq_len = inputs.size()
         embedded = self.embedding(inputs)
         outputs, h_n = self.rnn(embedded, hidden)
@@ -174,11 +165,6 @@ class AttGateDecoder(Decoder):
                 self.num_layers,
                 rnn_dropout)
 
-        # TODO: flexible hidden_size
-        #self.mlp1 = nn.Linear(
-        #        self.hidden_size,
-        #        self.vocab_size)
-
         self.dropout = nn.Dropout(mlp_dropout)
         self.gate = AttentiveGate(
                 hidden_size*2, # bi-GRU
@@ -193,9 +179,6 @@ class AttGateDecoder(Decoder):
                 hidden_size,
                 self.embed_size,
                 self.score_layer)
-
-        #self.gate = nn.Linear(hidden_size*3, hidden_size*2)
-
 
     def step(self, embed_t, hidden, context=None, mask=None):
         """
@@ -232,7 +215,7 @@ class AGDecoder(Decoder):
     """
     NOT BAD
     Attentive gating
-    The deocder set a gate for encoder outputs
+    The deocder set a gate on contexts before attention layer
     """
     def __init__(self,
             hidden_size,
@@ -258,11 +241,6 @@ class AGDecoder(Decoder):
                 self.hidden_size,
                 self.num_layers,
                 rnn_dropout)
-
-        # TODO: flexible hidden_size
-        #self.mlp1 = nn.Linear(
-        #        self.hidden_size,
-        #        self.vocab_size)
 
         self.dropout = nn.Dropout(mlp_dropout)
         self.attn = Attention(
@@ -278,23 +256,22 @@ class AGDecoder(Decoder):
                 self.embed_size,
                 self.score_layer)
 
-        self.gate = nn.Linear(hidden_size, hidden_size*2)
+        self.gate = nn.Linear(hidden_size*3, hidden_size*2)
         #self.gate = nn.Linear(hidden_size*3+self.embed_size, hidden_size*2)
 
 
     def step(self, embed_t, hidden, context=None, mask=None):
-        """
-
-        """
         output, h_n = self.rnn(embed_t, hidden)
         # gating
-        #tmp = torch.cat((embed_t, output.unsqueeze(1).expand(-1, context.size(1), -1), context), -1)
-        tmp = output.unsqueeze(1).expand(-1, context.size(1), -1)
+        tmp = torch.cat((output.unsqueeze(1).expand(-1, context.size(1), -1), context), -1)
+        #print(tmp.size())
+        #tmp = output.unsqueeze(1).expand(-1, context.size(1), -1)
+        #print(tmp.size())
         gate = self.gate(tmp)
         context = context * gate
         weighted, p_attn = self.attn(output, context, mask)
         logit = self.score_layer_(output, weighted, embed_t)
-        return logit, h_n, weighted, p_attn
+        return logit, h_n, weighted, context #p_attn
 
     def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
         """
@@ -302,21 +279,18 @@ class AGDecoder(Decoder):
         """
         batch_size, seq_len = inputs.size()
         mask = sequence_mask(context_lengths, context.size(1)).unsqueeze(1)
-        #embedded = self.embedding(inputs)
-        #outputs = []
         logits = []
         embedded = self.embedding(inputs)
         for embed_t in embedded.split(1, dim=1):
             embed_t = embed_t.squeeze(1)
-            logit, hidden, weighted, p_attn = self.step(embed_t, hidden, context, mask)
+            logit, hidden, weighted, context = self.step(embed_t, hidden, context, mask)
             logits.append(logit)
         logits = torch.stack(logits, 1).squeeze(2)
         return logits
 
 
-class AttnRNNDecoder(Decoder):
+class PosFeedDecoder(Decoder):
     """
-    
     """
     def __init__(self,
             hidden_size,
@@ -337,11 +311,10 @@ class AttnRNNDecoder(Decoder):
         self.embedding = embed
         self.cell = 'gru'
 
-        self.input_feed = True
+        self.input_feed = False
         self.input_size = self.embed_size
         if self.input_feed:
             self.input_size += self.hidden_size*2
-
 
         self.rnn = StackedGRU(
                 self.input_size,
@@ -349,12 +322,6 @@ class AttnRNNDecoder(Decoder):
                 self.num_layers,
                 rnn_dropout)
 
-        # TODO: flexible hidden_size
-        #self.mlp1 = nn.Linear(
-        #        self.hidden_size,
-        #        self.vocab_size)
-
-        #self.dropout = nn.Dropout(mlp_dropout)
         self.attn = Attention(
                 hidden_size*2, # bi-GRU
                 hidden_size,
@@ -367,9 +334,125 @@ class AttnRNNDecoder(Decoder):
                 hidden_size,
                 self.embed_size,
                 self.score_layer)
+        pos_size = 50
+        self.pos_embedding = nn.Embedding(pos_size, self.embed_size)
+        #self.len_embedding = nn.Embedding(pos_size, self.embed_size)
 
     def make_init_att(self, context):
         return context.data.new(context.size(0), context.size(2)).zero_()
+
+    def step(self, embed_t, hidden, context, mask, weighted):
+        """
+
+        """
+        inp_t = embed_t
+        if self.input_feed:
+            inp_t = torch.cat((embed_t, weighted), 1)
+        output, h_n = self.rnn(inp_t, hidden)
+        weighted, p_attn = self.attn(output, context, mask)
+        logit = self.score_layer_(output, weighted, embed_t)
+        return logit, h_n, weighted, p_attn
+
+    def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
+        """
+        
+        """
+        weighted = self.make_init_att(context)
+        batch_size, seq_len = inputs.size()
+        mask = sequence_mask(context_lengths, context.size(1)).unsqueeze(1)
+        #len_embed = self.len_embedding(lengths).unsqueeze(1).expand(-1, outputs.size(1), -1)
+        pos = torch.arange(0, inputs.size(1)).unsqueeze(0).to(inputs.device)
+        pos_embed = self.pos_embedding(pos).expand(inputs.size(0), -1, -1) # batch, len, dim
+        
+        logits = []
+        embedded = self.embedding(inputs) + pos_embed
+        for embed_t in embedded.split(1, dim=1):
+            embed_t = embed_t.squeeze(1)
+            logit, hidden, weighted, p_attn = self.step(embed_t, hidden, context, mask, weighted)
+            logits.append(logit)
+        logits = torch.stack(logits, 1).squeeze(2)
+        return logits
+
+    def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=30):
+        """
+        inputs (batch, 1, dim)
+        """
+        batch_size = hidden.size(1)
+        logits = []
+        preds = []
+        weighted = self.make_init_att(context)
+        mask = sequence_mask(context_lengths, context.size(1)).unsqueeze(1)
+        inp = sos_idx * torch.ones((batch_size,), dtype=torch.long).to(hidden.device)
+        t = 0
+        while True:
+            pos = t * torch.ones((batch_size,), dtype=torch.long).to(hidden.device)
+            pos_embed = self.pos_embedding(pos)
+            embed_t = self.embedding(inp) + pos_embed
+            logit, hidden, weighted, p_attn = self.step(embed_t, hidden, context, mask, weighted)
+            logp = F.log_softmax(logit, dim=-1)
+            maxv, maxidx = torch.max(logp, dim=-1)
+            if ((maxidx == eos_idx).all() and len(preds) > 0):
+                break
+            if len(preds) >= max_length:
+                break
+            logits.append(logit)
+            preds.append(maxidx.unsqueeze(1).cpu().numpy())
+            inp = maxidx
+            t += 1
+        logits = torch.cat(logits, dim=1)
+        preds = np.concatenate(preds, 1)
+        # print(preds.shape)
+        return preds
+
+class AttnRNNDecoder(Decoder):
+    """
+    GRU decoder with attention
+    """
+    def __init__(self,
+            hidden_size,
+            num_layers,
+            embed,
+            rnn_dropout=0., 
+            mlp_dropout=0.,
+            attn_type='concat',
+            input_feed=False):
+
+        super().__init__()
+        
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.embed_size = embed.embed_size
+        self.vocab_size = embed.vocab_size
+        self.attn_type = attn_type
+
+        self.embedding = embed
+        self.cell = 'gru'
+
+        self.input_feed = input_feed
+        self.input_size = self.embed_size
+        if self.input_feed:
+            self.input_size += self.hidden_size*2
+
+        self.rnn = StackedGRU(
+                self.input_size,
+                self.hidden_size,
+                self.num_layers,
+                rnn_dropout)
+
+        self.attn = Attention(
+                hidden_size*2, # bi-GRU
+                hidden_size,
+                attn_type,
+                hidden_size)
+
+        self.score_layer = 'readout'
+        self.score_layer_ = ScoreLayer(
+                self.vocab_size,
+                hidden_size*2,
+                hidden_size,
+                self.embed_size,
+                self.score_layer)
+
 
     def step(self, embed_t, hidden, context, mask, weighted):
         """
@@ -414,7 +497,9 @@ class AttnRNNDecoder(Decoder):
             logit, hidden, weighted, p_attn = self.step(embed_t, hidden, context, mask, weighted)
             logp = F.log_softmax(logit, dim=-1)
             maxv, maxidx = torch.max(logp, dim=-1)
-            if ((maxidx == eos_idx).all() and len(preds) > 0)  or len(preds) >= max_length:
+            if ((maxidx == eos_idx).all() and len(preds) > 0):
+                break
+            if len(preds) >= max_length:
                 break
             logits.append(logit)
             preds.append(maxidx.unsqueeze(1).cpu().numpy())
@@ -463,12 +548,6 @@ class GatedAttnRNNDecoder(Decoder):
                 self.num_layers,
                 rnn_dropout)
 
-
-        # TODO: flexible hidden_size
-        #self.mlp1 = nn.Linear(
-        #        self.hidden_size,
-        #        self.vocab_size)
-
         self.dropout = nn.Dropout(mlp_dropout)
         self.attn = Attention(
                 hidden_size*2, # bi-GRU
@@ -538,6 +617,9 @@ class GatedAttnRNNDecoder(Decoder):
             logp = F.log_softmax(logit, dim=-1)
             maxv, maxidx = torch.max(logp, dim=-1)
             if ((maxidx == eos_idx).all() and len(preds) > 0)  or len(preds) >= max_length:
+                if len(preds) >= max_length:
+                    print('max len achieved')
+
                 break
             logits.append(logit)
             preds.append(maxidx.unsqueeze(1).cpu().numpy())
@@ -548,128 +630,4 @@ class GatedAttnRNNDecoder(Decoder):
         # print(preds.shape)
         return preds
 
-
-
-class MinusAttnRNNDecoder(Decoder):
-    """
-    Another RNN encoder will encode the predictions (or ground truth during training)
-    of our decoder, whose hidden states will be used to generate a gate for decoder hidden
-    state before it's passed to next time step
-    """
-
-    def __init__(self,
-            hidden_size,
-            num_layers,
-            embed,
-            rnn_dropout=0., 
-            mlp_dropout=0.,
-            attn_type='concat'):
-
-        super().__init__()
-        
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.embed_size = embed.embed_size
-        self.vocab_size = embed.vocab_size
-        self.attn_type = attn_type
-
-        self.embedding = embed
-        self.cell = 'gru'
-
-        self.rnn = StackedGRU(
-                self.embed_size,
-                self.hidden_size,
-                self.num_layers,
-                rnn_dropout)
-        
-        self.enc = StackedGRU(
-                self.embed_size,
-                self.hidden_size,
-                self.num_layers,
-                rnn_dropout)
-
-
-        # TODO: flexible hidden_size
-        #self.mlp1 = nn.Linear(
-        #        self.hidden_size,
-        #        self.vocab_size)
-
-        self.dropout = nn.Dropout(mlp_dropout)
-        self.attn = Attention(
-                hidden_size*2, # bi-GRU
-                hidden_size,
-                attn_type,
-                hidden_size)
-        self.score_layer = 'readout'
-        self.score_layer_ = ScoreLayer(
-                self.vocab_size,
-                hidden_size*2,
-                hidden_size,
-                self.embed_size,
-                self.score_layer)
-        self.gate = nn.Linear(hidden_size*2, hidden_size)
-
-
-    def step(self, embed_t, hidden, context=None, mask=None):
-        """
-
-        """
-        output, h_n = self.rnn(embed_t, hidden)
-        weighted, p_attn = self.attn(output, context, mask)
-        logit = self.score_layer_(output, weighted, embed_t)
-        return logit, h_n, weighted, p_attn
-
-    def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
-        """
-        inputs: <SOS>, w1, w2...
-        """
-        batch_size, seq_len = inputs.size()
-        mask = sequence_mask(context_lengths, context.size(1)).unsqueeze(1)
-        #embedded = self.embedding(inputs)
-        #outputs = []
-        logits = []
-        enc_h = None
-        embedded = self.embedding(inputs).split(1, dim=1)
-        for t, embed_t in enumerate(embedded):
-            embed_t = embed_t.squeeze(1)
-            logit, hidden, weighted, p_attn = self.step(embed_t, hidden, context, mask)
-            logits.append(logit)
-            if t != seq_len-1:
-                enc_output, enc_h = self.enc(embedded[t+1].squeeze(1), enc_h)
-                gate = F.sigmoid(self.gate(torch.cat((enc_h, hidden),-1)))
-                hidden = hidden * gate
-
-        logits = torch.stack(logits, 1).squeeze(2)
-        return logits
-
-    def greedy_decode(self, hidden, sos_idx, eos_idx, context=None, context_lengths=None, max_length=30):
-        """
-        inputs (batch, 1, dim)
-        """
-        batch_size = hidden.size(1)
-        logits = []
-        preds = []
-        mask = sequence_mask(context_lengths, context.size(1)).unsqueeze(1)
-        inp = sos_idx * torch.ones((batch_size,), dtype=torch.long).to(hidden.device)
-        t = 0
-        enc_h = None
-        while True:
-            embed_t = self.embedding(inp)
-            if t > 0:
-                enc_output, enc_h = self.enc(embed_t, enc_h)
-                gate = F.sigmoid(self.gate(torch.cat((enc_h, hidden),-1)))
-                hidden = hidden * gate
-            logit, hidden, weighted, p_attn = self.step(embed_t, hidden, context, mask)
-            logp = F.log_softmax(logit, dim=-1)
-            maxv, maxidx = torch.max(logp, dim=-1)
-            if ((maxidx == eos_idx).all() and len(preds) > 0)  or len(preds) >= max_length:
-                break
-            logits.append(logit)
-            preds.append(maxidx.unsqueeze(1).cpu().numpy())
-            inp = maxidx
-            t += 1
-        logits = torch.cat(logits, dim=1)
-        preds = np.concatenate(preds, 1)
-        # print(preds.shape)
-        return preds
 

@@ -132,6 +132,7 @@ def train(args):
     for _ in itertools.count():
         for i, train_batch in enumerate(train):
 
+            epoch = step//n_train
             # train
             model.train()
             train_batch = to(train_batch, device)
@@ -139,7 +140,6 @@ def train(args):
             train_loss += train_loss_*n_train_batch_
             n_train_batch += n_train_batch_
             step += 1
-            epoch = step//n_train
 
 
             if step % cf.log_freq == 0:

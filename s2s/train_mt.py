@@ -137,6 +137,11 @@ def train(args):
         for i, train_batch in enumerate(train):
 
             # train
+            epoch = step//n_train
+            new_mt_coef = cf.mt_coef * (0.5)**epoch
+            if model.mt_coef != new_mt_coef:
+                model.mt_coef = new_mt_coef
+                print('MT coef: ', model.mt_coef)
             model.train()
             train_batch = to(train_batch, device)
             train_loss_, train_mt_loss_, n_train_batch_ = model.train_step(train_batch)
@@ -144,7 +149,6 @@ def train(args):
             train_mt_loss += train_mt_loss_*n_train_batch_
             n_train_batch += n_train_batch_
             step += 1
-            epoch = step//n_train
 
             if step % cf.log_freq == 0:
 

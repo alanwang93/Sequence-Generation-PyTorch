@@ -145,6 +145,7 @@ class Attention(nn.Module):
             query_dim, 
             attn_type, 
             attn_dim):
+
         super().__init__()
         self.value_dim = value_dim
         self.query_dim = query_dim
@@ -162,6 +163,14 @@ class Attention(nn.Module):
             self.v = nn.Linear(attn_dim, 1, bias=False)
         elif self.attn_type == 'bilinear':
             self.W = nn.Linear(query_dim, value_dim, bias=False)
+        elif self.attn_type == 'separate_concat':
+            self.Whf = nn.Linear(value_dim//2, attn_dim, bias=True)
+            self.Whb = nn.Linear(value_dim//2, attn_dim, bias=True)
+            self.Ws = nn.Linear(query_dim, attn_dim, bias=False) 
+            #self.Wsb = nn.Linear(query_dim, attn_dim, bias=False) 
+            self.vf = nn.Linear(attn_dim, 1, bias=False)
+            self.vb = nn.Linear(attn_dim, 1, bias=False)
+
 
 
     def forward(self, output, context, mask):
@@ -175,6 +184,7 @@ class Attention(nn.Module):
             output = self.q2v(output)
             output_ = F.relu(self.D(output)).unsqueeze(1)
             context_ = F.relu(self.D(context))
+            context_ = self.U(context_)
             scores = torch.bmm(output_, context_.transpose(1,2)) # batch_size, 1, src_len
             scores = scores.masked_fill(mask == 0, -1e9)
             p_attn = F.softmax(scores, -1) # batch x 1 x src_len
@@ -193,6 +203,27 @@ class Attention(nn.Module):
             scores = scores.masked_fill(mask == 0, -1e9)
             p_attn = F.softmax(scores, -1)
             weighted = torch.bmm(p_attn, context).suqeeze(1)
+        elif self.attn_type == 'separate_concat':
+            B, L, D = context.size()
+            context = context.view(B, L, 2, D//2)
+            contextf = context[:,:,0]
+            context_f = self.Whf(contextf)
+            output = self.Ws(output).unsqueeze(1).expand_as(context_f)
+            tmpf = torch.tanh(context_f + output) # batch x src_len x d
+            scoresf = self.vf(tmpf).transpose(1,2)  # batch x 1 x src_len
+            scoresf = scoresf.masked_fill(mask == 0, -1e9)
+            p_attnf = F.softmax(scoresf, -1)
+            weightedf = torch.bmm(p_attnf, contextf).squeeze(1)
+            contextb = context[:,:,1]
+            context_b = self.Whb(contextb)
+            tmpb = torch.tanh(context_b + output) # batch x src_len x d
+            scoresb = self.vb(tmpb).transpose(1,2)  # batch x 1 x src_len
+            scoresb = scoresb.masked_fill(mask == 0, -1e9)
+            p_attnb = F.softmax(scoresb, -1)
+            weightedb = torch.bmm(p_attnb, contextb).squeeze(1)
+            weighted = torch.cat((weightedf, weightedb), -1)
+            p_attn = p_attnb + p_attnf
+
         return weighted, p_attn
 
 
@@ -264,7 +295,7 @@ class DecInit(nn.Module):
 class Embedding(nn.Module):
 
     def __init__(self, embed_size, vocab, pretrained=None, \
-            pretrained_size=None, projection=False, embed_dropout=0.2):
+            pretrained_size=None, projection=False, embed_dropout=0.0):
         """
         1. use pretrained embedding
             1.1 with projection => embed_size 

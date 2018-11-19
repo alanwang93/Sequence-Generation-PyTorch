@@ -58,6 +58,18 @@ def test(args):
     train, dev, test = build_dataloaders(cf, src_vocab, tgt_vocab, False, False)
     n_dev, n_test = map(len, [dev, test])
     logger.info('Dataset sizes: dev {0}, test {1}'.format(n_dev, n_test))
+    
+    # load raw data for evaluation
+    dev_refs = []
+    with open(os.path.join(dc.raw, dc.dev_prefix + '.' + dc.tgt)) as f:
+        for line in f:
+            line = line.lower().strip() if dc.lower else line.strip()
+            dev_refs.append(line)
+    test_refs = []
+    with open(os.path.join(dc.raw, dc.test_prefix + '.' + dc.tgt)) as f:
+        for line in f:
+            line = line.lower().strip() if dc.lower else line.strip()
+            test_refs.append(line)
 
     # model
     model = getattr(models, cf.model)(cf, src_vocab, tgt_vocab, args.restore)
@@ -73,19 +85,19 @@ def test(args):
     dev_loss = 0
     n_dev_batch = 0
     model.eval()
-    dev_hyps, dev_refs = [], []
+    dev_hyps = []
     for dev_batch in dev:
         dev_batch = to(dev_batch, device)
         dev_loss_, n_dev_batch_ = model.get_loss(dev_batch)
         dev_loss += dev_loss_*n_dev_batch_
         n_dev_batch += n_dev_batch_
         preds = model.greedy_decode(dev_batch)
-        for ref, hyp in zip(dev_batch['tgt_in'], preds):
-            ref = ' '.join(tgt_vocab.tos(ref))
+        for hyp in preds:
+            #ref = ' '.join(tgt_vocab.tos(ref))
             hyp = ' '.join(tgt_vocab.tos(hyp))
             if hyp == '':
                 hyp = ' '
-            dev_refs.append(ref)
+            #dev_refs.append(ref)
             dev_hyps.append(hyp)
     dev_loss /= n_dev_batch
     
@@ -104,19 +116,17 @@ def test(args):
     test_loss = 0
     n_test_batch = 0
     model.eval()
-    test_hyps, test_refs = [], []
+    test_hyps = []
     for test_batch in test:
         test_batch = to(test_batch, device)
         test_loss_, n_test_batch_ = model.get_loss(test_batch)
         test_loss += test_loss_*n_test_batch_
         n_test_batch += n_test_batch_
         preds = model.greedy_decode(test_batch)
-        for ref, hyp in zip(test_batch['tgt_in'], preds):
-            ref = ' '.join(tgt_vocab.tos(ref))
+        for hyp in preds:
             hyp = ' '.join(tgt_vocab.tos(hyp))
             if hyp == '':
                 hyp = ' '
-            test_refs.append(ref)
             test_hyps.append(hyp)
     test_loss /= n_test_batch
     
