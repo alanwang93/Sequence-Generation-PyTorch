@@ -63,8 +63,6 @@ class Decoder(nn.Module):
             logp = F.log_softmax(logit, dim=-1)
             maxv, maxidx = torch.max(logp, dim=-1)
             if ((maxidx == eos_idx).all() and len(preds) > 0)  or len(preds) >= max_length:
-                if len(preds) >= max_length:
-                    print('max len achieved')
                 break
             logits.append(logit)
             preds.append(maxidx.unsqueeze(1).cpu().numpy())
@@ -257,6 +255,7 @@ class AGDecoder(Decoder):
                 self.score_layer)
 
         self.gate = nn.Linear(hidden_size*3, hidden_size*2)
+        #self.gate.bias = nn.init.normal_(self.gate.bias, 100., 0.1)
         #self.gate = nn.Linear(hidden_size*3+self.embed_size, hidden_size*2)
 
 
@@ -267,10 +266,13 @@ class AGDecoder(Decoder):
         #print(tmp.size())
         #tmp = output.unsqueeze(1).expand(-1, context.size(1), -1)
         #print(tmp.size())
-        gate = self.gate(tmp)
+        gate = F.sigmoid(self.gate(tmp))
         context = context * gate
         weighted, p_attn = self.attn(output, context, mask)
         logit = self.score_layer_(output, weighted, embed_t)
+        #print('logit', logit[0])
+        #print('weighted', weighted[0])
+        #print('gate', gate[0])
         return logit, h_n, weighted, context #p_attn
 
     def forward(self, inputs, lengths, hidden, context=None, context_lengths=None, tf_ratio=1.0):
@@ -617,9 +619,6 @@ class GatedAttnRNNDecoder(Decoder):
             logp = F.log_softmax(logit, dim=-1)
             maxv, maxidx = torch.max(logp, dim=-1)
             if ((maxidx == eos_idx).all() and len(preds) > 0)  or len(preds) >= max_length:
-                if len(preds) >= max_length:
-                    print('max len achieved')
-
                 break
             logits.append(logit)
             preds.append(maxidx.unsqueeze(1).cpu().numpy())
