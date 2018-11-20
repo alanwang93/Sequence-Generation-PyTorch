@@ -144,7 +144,7 @@ class MTSeq2seq(nn.Module):
                 cf.embed_dropout)
 
 
-        self.encoder = RNNEncoder(
+        self.encoder = MTEncoder(
                 cf.hidden_size,
                 cf.enc_num_layers,
                 encoder_embed,

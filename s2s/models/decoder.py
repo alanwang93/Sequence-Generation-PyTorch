@@ -300,7 +300,8 @@ class PosFeedDecoder(Decoder):
             embed,
             rnn_dropout=0., 
             mlp_dropout=0.,
-            attn_type='concat'):
+            attn_type='concat',
+            encoder_size=256):
 
         super().__init__()
         
@@ -316,7 +317,7 @@ class PosFeedDecoder(Decoder):
         self.input_feed = False
         self.input_size = self.embed_size
         if self.input_feed:
-            self.input_size += self.hidden_size*2
+            self.input_size += encoder_size * 2
 
         self.rnn = StackedGRU(
                 self.input_size,
@@ -417,7 +418,8 @@ class AttnRNNDecoder(Decoder):
             rnn_dropout=0., 
             mlp_dropout=0.,
             attn_type='concat',
-            input_feed=False):
+            input_feed=False,
+            encoder_size=256):
 
         super().__init__()
         
@@ -430,10 +432,10 @@ class AttnRNNDecoder(Decoder):
         self.embedding = embed
         self.cell = 'gru'
 
-        self.input_feed = input_feed
+        self.input_feed = True
         self.input_size = self.embed_size
         if self.input_feed:
-            self.input_size += self.hidden_size*2
+            self.input_size += encoder_size*2
 
         self.rnn = StackedGRU(
                 self.input_size,
@@ -442,7 +444,7 @@ class AttnRNNDecoder(Decoder):
                 rnn_dropout)
 
         self.attn = Attention(
-                hidden_size*2, # bi-GRU
+                encoder_size*2, # bi-GRU
                 hidden_size,
                 attn_type,
                 hidden_size)
@@ -450,7 +452,7 @@ class AttnRNNDecoder(Decoder):
         self.score_layer = 'readout'
         self.score_layer_ = ScoreLayer(
                 self.vocab_size,
-                hidden_size*2,
+                encoder_size*2,
                 hidden_size,
                 self.embed_size,
                 self.score_layer)

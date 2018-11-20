@@ -92,7 +92,7 @@ class GigawordSmall(DataConfig):
         self.test_prefix = 'test.filtered'
         
         # sentence
-        self.max_src_len = 120
+        self.max_src_len = 100
         self.max_tgt_len = 30
         self.src_out = False
         
@@ -124,15 +124,15 @@ class Gigaword(DataConfig):
         self.test_prefix = 'test.filtered'
         
         # sentence
-        self.max_src_len = 120
-        self.max_tgt_len = 50
+        self.max_src_len = 100
+        self.max_tgt_len = 30
         self.src_out = False
         
         # Vocabulary
         self.share_vocab = False
         self.max_src_vocab = 200000
         self.max_tgt_vocab = 100000
-        self.min_freq = 0
+        self.min_freq = 5
         self.lower = True
         self.dataloader = 'build_dataloaders'
 

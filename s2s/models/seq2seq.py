@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from s2s.utils.utils import get_vocab_weights
-from s2s.utils.losses import WeightedCE
+from s2s.utils.losses import WeightedCE, DecayCE
 from s2s.models.common import Embedding, DecInit
 from s2s.models.encoder import RNNEncoder, FusionEncoder, SelectiveEncoder, PosGatedEncoder
 from s2s.models.decoder import RNNDecoder, AttnRNNDecoder, GatedAttnRNNDecoder, \
@@ -67,14 +67,14 @@ class Seq2seq(BaseModel):
                 cf.embed_dropout)
 
         self.encoder = getattr(encoder, cf.encoder)(
-                cf.hidden_size,
+                cf.enc_hidden_size,
                 cf.enc_num_layers,
                 encoder_embed,
                 cf.bidirectional,
                 cf.rnn_dropout)
 
         self.decoder = getattr(decoder, cf.decoder)(
-                cf.hidden_size,
+                cf.dec_hidden_size,
                 cf.dec_num_layers,
                 decoder_embed,
                 cf.rnn_dropout,
@@ -82,9 +82,9 @@ class Seq2seq(BaseModel):
                 cf.attn_type)
 
         self.dec_initer = DecInit(
-                cf.hidden_size, 
-                cf.hidden_size,
-                cf.bidirectional)
+                cf.enc_hidden_size, 
+                cf.dec_hidden_size,
+                False)# cf.bidirectional)
 
         self.params = list(self.parameters()) #list(self.encoder.parameters()) +  list(self.decoder.parameters())
         self.optimizer = getattr(torch.optim, cf.optimizer)(self.params, **cf.optimizer_kwargs)
@@ -100,13 +100,13 @@ class Seq2seq(BaseModel):
                 ignore_index=dc.pad_idx)
 
         if self.weighted_loss:
-            self.loss = WeightedCE(self.loss)
+            self.loss = DecayCE(self.loss)
 
     def forward(self, batch):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
         src_output, src_last = self.encoder(src, len_src)
-        dec_init = self.dec_initer(src_last)#.unsqueeze(0) # last back hidden
+        dec_init = self.dec_initer(src_last[1].unsqueeze(0))#.unsqueeze(0) # last back hidden
         logits = self.decoder(tgt_in, len_tgt, dec_init, src_output, len_src)
         return logits
 
@@ -138,7 +138,7 @@ class Seq2seq(BaseModel):
         src, len_src = batch['src_in'], batch['len_src']
         tgt_in, len_tgt = batch['tgt_in'],  batch['len_tgt']
         src_outputs, src_last = self.encoder(src, len_src)
-        dec_init = self.dec_initer(src_last) #.unsqueeze(0) # last back hidden
+        dec_init = self.dec_initer(src_last[1].unsqueeze(0)) #.unsqueeze(0) # last back hidden
         preds = self.decoder.greedy_decode(dec_init, self.sos_idx, self.eos_idx, src_outputs, len_src,\
                 self.config.max_length)
         return preds

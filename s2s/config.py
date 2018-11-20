@@ -12,7 +12,8 @@ class Config:
         self.batch_size = 64
         self.max_step = 100000
 
-        self.hidden_size = 512
+        self.enc_hidden_size = 256
+        self.dec_hidden_size = 512
         self.enc_num_layers = 1
         self.dec_num_layers = 1
         self.embed_size = 300
@@ -46,7 +47,7 @@ class Config:
 
 
         # validation
-        self.metric = 'ROUGE-2'
+        self.metric = 'ROUGE-1'
         self.init_metric = 0.
         self.max_length = 50
         self.input_feed = False
@@ -65,7 +66,8 @@ class Vanilla(Config):
         self.model = 'Seq2seq'
         self.encoder = 'RNNEncoder'
         self.decoder = 'AttnRNNDecoder'
-        self.hidden_size = 512
+        self.enc_hidden_size = 256
+        self.dec_hidden_size = 512
         self.enc_num_layers = 1
         self.dec_num_layers = 1
         self.embed_size = 300
@@ -96,7 +98,7 @@ class SEASS(Config):
         self.model = 'Seq2seq'
         self.encoder = 'SelectiveEncoder'
         self.decoder = 'AttnRNNDecoder'
-        self.hidden_size = 512
+        self.enc_hidden_size = 256
         self.enc_num_layers = 1
         self.dec_num_layers = 1
         self.embed_size = 300
