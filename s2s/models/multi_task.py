@@ -11,6 +11,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from sklearn.metrics import *
+
 from s2s.models.common import Embedding, DecInit
 from s2s.models.encoder import RNNEncoder
 from s2s.models.decoder import RNNDecoder, AttnRNNDecoder
@@ -144,8 +146,8 @@ class MTSeq2seq(nn.Module):
                 cf.embed_dropout)
 
 
-        self.encoder = MTEncoder(
-                cf.hidden_size,
+        self.encoder = RNNEncoder(
+                cf.enc_hidden_size,
                 cf.enc_num_layers,
                 encoder_embed,
                 cf.bidirectional,
@@ -159,7 +161,7 @@ class MTSeq2seq(nn.Module):
         #        cf.rnn_dropout)
 
         self.decoder = AttnRNNDecoder(
-                cf.hidden_size,
+                cf.dec_hidden_size,
                 cf.dec_num_layers,
                 decoder_embed,
                 cf.rnn_dropout,
@@ -167,12 +169,12 @@ class MTSeq2seq(nn.Module):
                 cf.attn_type)
         
         self.num_directions = 2 if cf.bidirectional else 1
-        self.mt_linear = nn.Linear(cf.hidden_size*2, cf.hidden_size//2) # TODO: add sentence repr
-        self.mt_linear2 = nn.Linear(cf.hidden_size//2, 3)
+        self.mt_linear = nn.Linear(cf.enc_hidden_size*2, cf.enc_hidden_size//2) # TODO: add sentence repr
+        self.mt_linear2 = nn.Linear(cf.enc_hidden_size//2, 3)
         self.dec_initer = DecInit(
-                cf.hidden_size, 
-                cf.hidden_size, 
-                bidirectional=cf.bidirectional)
+                cf.enc_hidden_size, 
+                cf.dec_hidden_size, 
+                False) #bidirectional=cf.bidirectional)
 
 
         self.params = list(self.parameters())
@@ -185,8 +187,8 @@ class MTSeq2seq(nn.Module):
                 verbose=True)
         self.dropout = nn.Dropout(0.5)
        
-        self.loss = nn.CrossEntropyLoss(reduction='elementwise_mean', ignore_index=dc.pad_idx)
-        self.mt_loss = nn.CrossEntropyLoss(weight=torch.Tensor([0., 5., 1.]), reduction='elementwise_mean', ignore_index=dc.pad_idx)
+        self.loss = nn.CrossEntropyLoss(reduction='sum', ignore_index=dc.pad_idx)
+        self.mt_loss = nn.CrossEntropyLoss(weight=torch.Tensor([0., 1., 1.]), reduction='sum', ignore_index=dc.pad_idx)
 
     def forward(self, batch):
         src, len_src = batch['src_in'], batch['len_src']
@@ -220,16 +222,20 @@ class MTSeq2seq(nn.Module):
         loss = self.loss(input=logits.view(batch_size*seq_len, -1), target=batch['tgt_out'].view(-1))
         mt_loss = self.mt_loss(input=mt_logits.view(batch_size*en_seq_len, -1),\
                 target=batch['src_out'][:,:en_seq_len].contiguous().view(-1))
-        #mt_preds = torch.argmax(encoder_logits.view(batch_size*en_seq_len, -1), dim=1).cpu().numpy()
-        #y_true = batch['src_out'][:,:en_seq_len].contiguous().view(-1).cpu().numpy()
-        #print('pred', mt_preds[:30])
-        #print('true', y_true[:30], '\n')
+        mt_preds = torch.argmax(mt_logits.view(batch_size*en_seq_len, -1), dim=1).cpu().numpy()
+        y_true = batch['src_out'][:,:en_seq_len].contiguous().view(-1).cpu().numpy()
+        mt_preds = [1 if i == 1 else 0 for i in mt_preds]
+        y_true = [1 if i == 1 else 0 for i in y_true]
+        print('pred', mt_preds[:30])
+        print('true', y_true[:30], '\n')
         #n_true = 0
         #for t, p in zip(y_true, mt_preds):
         #    if t == p and t != 0:
         #        n_true += 1
         #prec = n_true/len(y_true)
-        #print('precision', prec)
+        print('precision', precision_score(y_true, mt_preds))
+        print('recall', recall_score(y_true, mt_preds))
+        print('f1', f1_score(y_true, mt_preds))
 
         return loss.item(), mt_loss.item(), batch_size  
 

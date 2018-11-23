@@ -8,10 +8,12 @@ import numpy as np
 from torch.utils import data
 from torch.nn.utils.rnn import pad_sequence
 
-#class BatchIterator:
-#    def __init__(self, generator, data_size):
-#       self.iterator = generator()
- 
+from nltk.stem.porter import *
+import nltk
+from nltk.corpus import stopwords
+import string
+
+
 class DictDataset(data.Dataset):
     """
     Build dataset with list of dicts
@@ -224,6 +226,12 @@ def build_dataloaders_mt(
             #print(unique, counts)
             print('Loading takes {0:.3f} s'.format(time.time()-start))
         else:
+
+            stem = PorterStemmer()
+            stopWords = stopwords.words('english')
+            stopWords.extend(list(string.punctuation))
+            stopWords.extend(['``', '`', "''"])
+
             print('Building dataloaders...')
             with open(src_file, 'r') as s, open(tgt_file, 'r') as t:
                 start = time.time()
@@ -251,8 +259,10 @@ def build_dataloaders_mt(
                     # 1: src token in tgt string
                     # 2: no
                     src_out = [0]*max_len_src
+                    stem_src = [stem.stem(w) for w in str_src]
+                    stem_tgt = [stem.stem(w) for w in str_tgt]
                     for i in range(len_src):
-                        if str_src[i] in str_tgt:
+                        if stem_src[i] in stem_tgt and stem_src[i] not in stopWords:
                             src_out[i] = 1
                             num_pos += 1
                         else:

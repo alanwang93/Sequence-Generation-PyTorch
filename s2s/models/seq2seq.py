@@ -94,6 +94,7 @@ class Seq2seq(BaseModel):
                 factor=0.5,
                 patience=cf.patience,
                 verbose=True)
+
         self.weighted_loss = False
         self.loss = nn.CrossEntropyLoss(
                 reduction='sum', 
