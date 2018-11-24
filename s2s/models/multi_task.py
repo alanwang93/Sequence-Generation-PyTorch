@@ -188,7 +188,7 @@ class MTSeq2seq(nn.Module):
         self.dropout = nn.Dropout(0.5)
        
         self.loss = nn.CrossEntropyLoss(reduction='sum', ignore_index=dc.pad_idx)
-        self.mt_loss = nn.CrossEntropyLoss(weight=torch.Tensor([0., 1., 1.]), reduction='sum', ignore_index=dc.pad_idx)
+        self.mt_loss = nn.CrossEntropyLoss(weight=torch.Tensor([0., 2., 1.]), reduction='sum', ignore_index=dc.pad_idx)
 
     def forward(self, batch):
         src, len_src = batch['src_in'], batch['len_src']

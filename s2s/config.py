@@ -10,7 +10,7 @@ class Config:
         self.model_path = model_path
         self.dataset = getattr(datasets, dataset)(raw_root, data_root)
         self.batch_size = 64
-        self.max_step = 100000
+        self.max_step = 30000
 
         self.enc_hidden_size = 256
         self.dec_hidden_size = 512
