@@ -98,8 +98,31 @@ class ScoreLayer(nn.Module):
             maxout = self.maxout(readout)
             maxout = self.dropout(maxout)
             logit = self.W(maxout)
-
         return logit
+
+class WEAN(nn.Module):
+    """
+    Word Embedding Attention Network
+    """
+    def __init__(self,
+            query_size,
+            embed_size,
+            attn_size,
+            attn_type='concat'):
+        self.query_size = query_size
+        self.embed_size = embed_size
+        self.attn_size = attn_size
+        self.attn_type = attn_type
+
+        self.Wq = nn.Linear(query_size, attn_size, bias=False)
+        self.We = nn.Linear(embed_size, attn_size, bias=True)
+        self.v = nn.Linear(attn_size, 1)
+
+    def forward(self, query, embed):
+        """
+        query: B x 1 x D
+        embed: num_vocab x embed_size
+        """
 
 
 class AttentiveGate(nn.Module):

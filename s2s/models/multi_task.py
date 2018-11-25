@@ -122,6 +122,7 @@ class MTSeq2seq(nn.Module):
         self.src_vocab = src_vocab
         self.tgt_vocab = tgt_vocab
         self.mt_coef = cf.mt_coef
+
         if cf.pretrained is not None:
             pretrained = os.path.join(cf.raw_root, 'embeddings', cf.pretrained)
         else:
@@ -247,6 +248,153 @@ class MTSeq2seq(nn.Module):
         preds = self.decoder.greedy_decode(dec_init, self.sos_idx, self.eos_idx, src_outputs, len_src)
         return preds
 
+ 
+class MTSeq2seq(nn.Module):
+    """Version 2"""
+    def __init__(self, config, src_vocab, tgt_vocab, restore):
+        super().__init__()
+        cf = config
+        dc = cf.dataset
+
+        self.config = config
+        self.sos_idx = dc.sos_idx
+        self.eos_idx = dc.eos_idx
+        self.src_vocab = src_vocab
+        self.tgt_vocab = tgt_vocab
+        self.mt_coef = cf.mt_coef
+
+        if cf.pretrained is not None:
+            pretrained = os.path.join(cf.raw_root, 'embeddings', cf.pretrained)
+        else:
+            pretrained = None
+        if restore is not None:
+            pretrained = None 
+
+        encoder_embed = Embedding(
+                cf.embed_size,
+                src_vocab,
+                pretrained,
+                cf.pretrained_size,
+                cf.projection,
+                cf.embed_dropout)
+        
+        decoder_embed = Embedding(
+                cf.embed_size,
+                tgt_vocab,
+                pretrained,
+                cf.pretrained_size,
+                cf.projection,
+                cf.embed_dropout)
+
+
+        self.encoder = RNNEncoder(
+                cf.enc_hidden_size,
+                cf.enc_num_layers,
+                encoder_embed,
+                cf.bidirectional,
+                cf.rnn_dropout)
+
+        #self.clf_encoder = RNNEncoder(
+        #        cf.hidden_size,
+        #        cf.enc_num_layers,
+        #        encoder_embed,
+        #        cf.bidirectional,
+        #        cf.rnn_dropout)
+
+        self.decoder = AttnRNNDecoder(
+                cf.dec_hidden_size,
+                cf.dec_num_layers,
+                decoder_embed,
+                cf.rnn_dropout,
+                cf.mlp_dropout,
+                cf.attn_type)
+        
+        self.num_directions = 2 if cf.bidirectional else 1
+        self.gate = nn.Linear(cf.enc_hidden_size*2*2, cf.enc_hidden_size*2)
+        self.mt_linear = nn.Linear(cf.enc_hidden_size*2, cf.enc_hidden_size//2) # TODO: add sentence repr
+        self.mt_linear2 = nn.Linear(cf.enc_hidden_size//2, 3)
+        
+        self.dec_initer = DecInit(
+                cf.enc_hidden_size, 
+                cf.dec_hidden_size, 
+                False) #bidirectional=cf.bidirectional)
+
+
+        self.params = list(self.parameters())
+        self.optimizer = getattr(torch.optim, cf.optimizer)(self.params, **cf.optimizer_kwargs)
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                self.optimizer, 
+                cf.scheduler_mode,
+                factor=0.5,
+                patience=cf.patience,
+                verbose=True)
+        self.dropout = nn.Dropout(0.5)
+       
+        self.loss = nn.CrossEntropyLoss(reduction='sum', ignore_index=dc.pad_idx)
+        self.mt_loss = nn.CrossEntropyLoss(weight=torch.Tensor([0., 1., 1.]), reduction='sum', ignore_index=dc.pad_idx)
+
+    def forward(self, batch):
+        src, len_src = batch['src_in'], batch['len_src']
+        tgt_in, tgt_out, len_tgt = batch['tgt_in'], batch['tgt_out'], batch['len_tgt']
+        src_output, src_last = self.encoder(src, len_src)
+        tmp = torch.cat((src_last[0], src_last[1]), -1)
+        gate = self.gate(torch.cat((src_output, tmp.unsqueeze(1).expand(-1, src_output.size(1), -1)), -1))
+        gated_src_output = src_output*gate
+        dec_init = self.dec_initer(src_last[1].unsqueeze(0))
+        logits = self.decoder(tgt_in, len_tgt, dec_init, src_output, len_src)
+        mt_logits = self.dropout(self.mt_linear(gated_src_output))
+        mt_logits = self.mt_linear2(F.relu(mt_logits))
+        return logits, mt_logits
+
+    def train_step(self, batch):
+        logits, mt_logits = self.forward(batch)
+        batch_size, seq_len, _ = logits.size()
+        en_seq_len = mt_logits.size(1)
+        loss = self.loss(input=logits.view(batch_size*seq_len, -1), target=batch['tgt_out'].view(-1))
+        mt_loss = self.mt_loss(input=mt_logits.view(batch_size*en_seq_len, -1),\
+                target=batch['src_out'][:,:en_seq_len].contiguous().view(-1))
+        self.optimizer.zero_grad()
+        total_loss = loss + self.mt_coef *mt_loss
+        total_loss.backward()
+        nn.utils.clip_grad_norm_(self.params, self.config.clip_norm)
+        self.optimizer.step()
+        return loss.item(), mt_loss.item(), batch_size
+
+    def get_loss(self, batch):
+        #logits, _ = self.forward(batch)
+        logits, mt_logits = self.forward(batch)
+        en_seq_len = mt_logits.size(1)
+        batch_size, seq_len, _ = logits.size()
+        loss = self.loss(input=logits.view(batch_size*seq_len, -1), target=batch['tgt_out'].view(-1))
+        mt_loss = self.mt_loss(input=mt_logits.view(batch_size*en_seq_len, -1),\
+                target=batch['src_out'][:,:en_seq_len].contiguous().view(-1))
+        mt_preds = torch.argmax(mt_logits.view(batch_size*en_seq_len, -1), dim=1).cpu().numpy()
+        y_true = batch['src_out'][:,:en_seq_len].contiguous().view(-1).cpu().numpy()
+        mt_preds = [1 if i == 1 else 0 for i in mt_preds]
+        y_true = [1 if i == 1 else 0 for i in y_true]
+        print('pred', mt_preds[:30])
+        print('true', y_true[:30], '\n')
+        #n_true = 0
+        #for t, p in zip(y_true, mt_preds):
+        #    if t == p and t != 0:
+        #        n_true += 1
+        #prec = n_true/len(y_true)
+        print('precision', precision_score(y_true, mt_preds))
+        print('recall', recall_score(y_true, mt_preds))
+        #print('f1', f1_score(y_true, mt_preds))
+
+        return loss.item(), mt_loss.item(), batch_size  
+
+    def greedy_decode(self, batch):
+        src, len_src = batch['src_in'], batch['len_src']
+        tgt_in, len_tgt = batch['tgt_in'],  batch['len_tgt']
+        src_output, src_last = self.encoder(src, len_src)
+        #tmp = torch.cat((src_last[0], src_last[1]), -1)
+        #gate = self.gate(torch.cat((src_output, tmp.unsqueeze(1).expand(-1, src_output.size(1), -1)), -1))
+        #src_output = src_output*gate
+        dec_init = self.dec_initer(src_last[1].unsqueeze(0))
+        preds = self.decoder.greedy_decode(dec_init, self.sos_idx, self.eos_idx, src_output, len_src)
+        return preds
 
   
 class MTSeq2seq_v2(nn.Module):
